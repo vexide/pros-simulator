@@ -27,7 +27,7 @@ fn main() -> Result<()> {
 
     // lcd_initialize
     linker.func_wrap(
-        "pros",
+        "env",
         "lcd_initialize",
         |caller: Caller<'_, SimulatorState>| -> anyhow::Result<u32> {
             let mut host = caller.data().host.borrow_mut();
@@ -38,15 +38,18 @@ fn main() -> Result<()> {
     )?;
 
     linker.func_wrap(
-        "pros",
+        "env",
         "lcd_set_text",
         |caller: Caller<'_, SimulatorState>, line: u32, ptr: u32| -> anyhow::Result<u32> {
             let mut host = caller.data().host.borrow_mut();
             let memory = host.memory.as_ref().unwrap();
-            let text = memory.data(&caller)
+            let text = memory
+                .data(&caller)
                 .get(ptr as usize..)
                 .and_then(|arr| arr.iter().position(|&x| x == 0))
-                .and_then(|len| std::str::from_utf8(&memory.data(&caller)[ptr as usize..][..len]).ok())
+                .and_then(|len| {
+                    std::str::from_utf8(&memory.data(&caller)[ptr as usize..][..len]).ok()
+                })
                 .ok_or_else(|| anyhow!("invalid UTF-8 string"))?;
             let res = host.lcd.set_line(line, text);
 
@@ -55,7 +58,7 @@ fn main() -> Result<()> {
     )?;
 
     linker.func_wrap(
-        "pros",
+        "env",
         "lcd_clear_line",
         |caller: Caller<'_, SimulatorState>, line: u32| -> anyhow::Result<u32> {
             let mut host = caller.data().host.borrow_mut();
@@ -66,7 +69,7 @@ fn main() -> Result<()> {
     )?;
 
     linker.func_wrap(
-        "pros",
+        "env",
         "lcd_clear",
         |caller: Caller<'_, SimulatorState>| -> anyhow::Result<u32> {
             let mut host = caller.data().host.borrow_mut();
@@ -76,13 +79,9 @@ fn main() -> Result<()> {
         },
     )?;
 
-    linker.func_wrap(
-        "pros",
-        "delay",
-        |millis: u32| {
-            sleep(Duration::from_millis(millis.into()));
-        },
-    )?;
+    linker.func_wrap("env", "delay", |millis: u32| {
+        sleep(Duration::from_millis(millis.into()));
+    })?;
 
     linker.func_wrap(
         "env",
@@ -97,7 +96,9 @@ fn main() -> Result<()> {
 
     let instance = linker.instantiate(&mut store, &module)?;
 
-    let memory = instance.get_memory(&mut store, "memory").expect("Robot code should export memory");
+    let memory = instance
+        .get_memory(&mut store, "memory")
+        .expect("Robot code should export memory");
     let host = store.data().host.clone();
     host.borrow_mut().memory = Some(memory);
 
