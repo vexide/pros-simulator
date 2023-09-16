@@ -1,20 +1,16 @@
 #![no_main]
-use pros_sys::*;
-use std::ffi::CString;
+use pros::multitasking::sleep;
+use pros::prelude::{println, *};
+use std::time::Duration;
 
 #[no_mangle]
 pub extern "C" fn initialize() {
-    unsafe {
-        lcd_initialize();
-        delay(1000);
-        let text = CString::new("Hello, world!").unwrap();
-        lcd_set_text(0, text.as_ptr());
-        delay(1000);
-        let text = CString::new("This is from inside a simulator!").unwrap();
-        lcd_set_text(1, text.as_ptr());
-        delay(1000);
-        let text = CString::new("Wow!").unwrap();
-        lcd_set_text(2, text.as_ptr());
-        delay(1000);
-    }
+    let sleep_duration = Duration::from_secs(1);
+    sleep(sleep_duration);
+    println!("Hello world");
+    sleep(sleep_duration);
+    println!("This is from inside a simulator!");
+    sleep(sleep_duration);
+    println!("Wow!");
+    sleep(sleep_duration);
 }

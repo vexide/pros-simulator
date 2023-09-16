@@ -1,8 +1,11 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
-use wasmtime::{TypedFunc, Memory};
+use wasmtime::{AsContextMut, Instance, Memory, TypedFunc};
 use wasmtime_wasi::WasiCtx;
-
 
 #[derive(Debug, Default)]
 pub struct Lcd {
@@ -62,6 +65,34 @@ impl Lcd {
     }
 }
 
+pub struct WasmAllocator {
+    wasm_memalign: TypedFunc<(u32, u32), u32>,
+    wasm_free: TypedFunc<u32, ()>,
+}
+
+impl WasmAllocator {
+    pub fn new(mut store: impl AsContextMut, instance: &Instance) -> Self {
+        Self {
+            wasm_memalign: instance
+                .get_typed_func::<(u32, u32), u32>(&mut store, "wasm_memalign")
+                .unwrap(),
+            wasm_free: instance
+                .get_typed_func::<u32, ()>(&mut store, "wasm_free")
+                .unwrap(),
+        }
+    }
+
+    pub fn memalign(&self, mut store: impl AsContextMut, alignment: u32, size: u32) -> u32 {
+        self.wasm_memalign
+            .call(&mut store, (alignment, size))
+            .unwrap()
+    }
+
+    pub fn free(&self, mut store: impl AsContextMut, ptr: u32) {
+        self.wasm_free.call(&mut store, ptr).unwrap()
+    }
+}
+
 #[derive(Default)]
 pub struct Host {
     pub autonomous: Option<TypedFunc<(), ()>>,
@@ -71,6 +102,9 @@ pub struct Host {
     pub op_control: Option<TypedFunc<(), ()>>,
     pub memory: Option<Memory>,
     pub lcd: Lcd,
+    /// Pointers to mutexes created with mutex_create
+    pub mutexes: HashSet<u32>,
+    pub wasm_allocator: Option<WasmAllocator>,
 }
 
 pub struct SimulatorState {

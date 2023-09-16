@@ -79,6 +79,18 @@ fn main() -> Result<()> {
         },
     )?;
 
+    // mutexes are currently a no-op because threads aren't implemented yet
+
+    linker.func_wrap("env", "mutex_create", || 0u32)?;
+
+    linker.func_wrap("env", "mutex_delete", || {})?;
+
+    linker.func_wrap("env", "mutex_give", |_mutex: u32| -> u32 { true.into() })?;
+
+    linker.func_wrap("env", "mutex_take", |_mutex: u32, _timeout: u32| -> u32 {
+        true.into()
+    })?;
+
     linker.func_wrap("env", "delay", |millis: u32| {
         sleep(Duration::from_millis(millis.into()));
     })?;
