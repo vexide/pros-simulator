@@ -1,7 +1,6 @@
-use std::{cell::RefCell, collections::HashSet, rc::Rc};
+use std::collections::HashSet;
 
 use wasmtime::{AsContextMut, Instance, Memory, TypedFunc};
-use wasmtime_wasi::WasiCtx;
 
 #[derive(Debug, Default)]
 pub struct Lcd {
@@ -101,9 +100,4 @@ pub struct Host {
     /// Pointers to mutexes created with mutex_create
     pub mutexes: HashSet<u32>,
     pub wasm_allocator: Option<WasmAllocator>,
-}
-
-pub struct SimulatorState {
-    pub wasi: WasiCtx,
-    pub host: Rc<RefCell<Host>>,
 }
