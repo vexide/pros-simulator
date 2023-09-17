@@ -83,7 +83,7 @@ fn main() -> Result<()> {
 
     linker.func_wrap("env", "mutex_create", || 0u32)?;
 
-    linker.func_wrap("env", "mutex_delete", || {})?;
+    linker.func_wrap("env", "mutex_delete", |_mutex: u32| {})?;
 
     linker.func_wrap("env", "mutex_give", |_mutex: u32| -> u32 { true.into() })?;
 

@@ -1,8 +1,4 @@
-use std::{
-    cell::RefCell,
-    collections::{HashMap, HashSet},
-    rc::Rc,
-};
+use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 use wasmtime::{AsContextMut, Instance, Memory, TypedFunc};
 use wasmtime_wasi::WasiCtx;
