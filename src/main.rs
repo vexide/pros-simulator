@@ -48,7 +48,7 @@ fn main() -> Result<()> {
         "lcd_clear_line",
         |mut caller: Caller<'_, Host>, line: i32| -> anyhow::Result<u32> {
             let host = caller.data_mut();
-            let res = host.lcd.set_line(line, "");
+            let res = host.lcd.clear_line(line);
             Ok(res.use_errno(&mut caller).into())
         },
     )?;
