@@ -1,65 +1,11 @@
-use std::collections::HashSet;
+use std::{alloc::Layout, collections::HashSet};
+use wasmtime::{AsContextMut, Caller, Instance, Memory, TypedFunc};
 
-use wasmtime::{AsContextMut, Instance, Memory, TypedFunc};
+pub mod lcd;
 
-#[derive(Debug, Default)]
-pub struct Lcd {
-    initialized: bool,
-    lines: [String; Lcd::HEIGHT as usize],
-}
+use lcd::Lcd;
 
-impl Lcd {
-    const HEIGHT: u32 = 8;
-    const WIDTH: u32 = 50;
-
-    pub fn initialize(&mut self) -> bool {
-        if self.initialized {
-            return false;
-        }
-        self.initialized = true;
-        self.draw(false);
-        true
-    }
-
-    pub fn set_line(&mut self, line: u32, text: &str) -> bool {
-        if !self.initialized {
-            return false;
-        }
-        if text.len() > Lcd::WIDTH as usize {
-            return false;
-        }
-        if line >= Lcd::HEIGHT {
-            return false;
-        }
-        self.lines[line as usize] = text.to_string();
-        self.draw(true);
-        true
-    }
-
-    pub fn draw(&self, redraw: bool) {
-        if redraw {
-            // move up Lcd::Height
-            print!("\x1b[{}A", Lcd::HEIGHT);
-        } else {
-            println!("LCD Display:");
-        }
-        for line in &self.lines {
-            println!(">{line:width$}<", width = Lcd::WIDTH as usize);
-        }
-    }
-
-    pub fn clear(&mut self) -> bool {
-        if !self.initialized {
-            return false;
-        }
-        for line in 0..Lcd::HEIGHT {
-            self.lines[line as usize] = String::new();
-        }
-        self.draw(true);
-        true
-    }
-}
-
+#[derive(Clone)]
 pub struct WasmAllocator {
     wasm_memalign: TypedFunc<(u32, u32), u32>,
     wasm_free: TypedFunc<u32, ()>,
@@ -77,10 +23,17 @@ impl WasmAllocator {
         }
     }
 
-    pub fn memalign(&self, mut store: impl AsContextMut, alignment: u32, size: u32) -> u32 {
-        self.wasm_memalign
+    pub fn memalign(&self, mut store: impl AsContextMut, layout: Layout) -> u32 {
+        let size = layout.size().try_into().unwrap();
+        let alignment = layout.align().try_into().unwrap();
+        let ptr = self
+            .wasm_memalign
             .call(&mut store, (alignment, size))
-            .unwrap()
+            .unwrap();
+        if ptr == 0 {
+            panic!("wasm_memalign failed");
+        }
+        ptr
     }
 
     pub fn free(&self, mut store: impl AsContextMut, ptr: u32) {
@@ -100,4 +53,62 @@ pub struct Host {
     /// Pointers to mutexes created with mutex_create
     pub mutexes: HashSet<u32>,
     pub wasm_allocator: Option<WasmAllocator>,
+    pub errno_address: Option<u32>,
+}
+
+pub const ERRNO_LAYOUT: Layout = Layout::new::<i32>();
+
+pub trait ErrnoExt {
+    fn errno_address(&mut self) -> u32;
+    fn set_errno(&mut self, new_errno: i32);
+}
+
+impl<'a> ErrnoExt for Caller<'a, Host> {
+    fn errno_address(&mut self) -> u32 {
+        self.as_context_mut()
+            .data()
+            .errno_address
+            .unwrap_or_else(|| {
+                let allocator = self.data().wasm_allocator.clone();
+                let errno_address = allocator.unwrap().memalign(&mut *self, ERRNO_LAYOUT);
+                self.data_mut().errno_address = Some(errno_address);
+                errno_address
+            })
+    }
+    fn set_errno(&mut self, new_errno: i32) {
+        let address = self.errno_address();
+
+        let memory = self.data().memory.unwrap().data_mut(&mut *self);
+        let data = &mut memory
+            .get_mut(address as usize..)
+            .expect("expected valid pointer")[0..][..ERRNO_LAYOUT.size()];
+        data.clone_from_slice(&new_errno.to_le_bytes());
+    }
+}
+
+pub trait ResultExt {
+    /// If this result is an error, sets the simulator's [`errno`](Host::errno_address) to the Err value.
+    fn set_errno(&self, caller: &mut Caller<'_, Host>);
+    /// If this result is an error, sets the simulator's [`errno`](Host::errno_address) to the Err value.
+    /// Returns `true` if the result was Ok and `false` if it was Err.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let res = host.lcd.set_line(line, "");
+    /// Ok(res.use_errno(&mut caller).into())
+    /// ```
+    fn use_errno(&self, caller: &mut Caller<'_, Host>) -> bool;
+}
+
+impl<T> ResultExt for Result<T, i32> {
+    fn set_errno(&self, caller: &mut Caller<'_, Host>) {
+        if let Err(errno) = self {
+            caller.set_errno(*errno);
+        }
+    }
+    fn use_errno(&self, caller: &mut Caller<'_, Host>) -> bool {
+        self.set_errno(caller);
+        self.is_ok()
+    }
 }

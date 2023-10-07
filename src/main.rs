@@ -1,7 +1,9 @@
 use std::{thread::sleep, time::Duration};
 
 use anyhow::{anyhow, Result};
+use host::ErrnoExt;
 use host::Host;
+use host::ResultExt;
 use wasmtime::*;
 
 pub mod host;
@@ -20,35 +22,34 @@ fn main() -> Result<()> {
             let host = caller.data_mut();
             let res = host.lcd.initialize();
 
-            Ok(res.into())
+            Ok(res.is_ok().into())
         },
     )?;
 
     linker.func_wrap(
         "env",
         "lcd_set_text",
-        |mut caller: Caller<'_, Host>, line: u32, ptr: u32| -> anyhow::Result<u32> {
+        |mut caller: Caller<'_, Host>, line: i32, text_ptr: u32| -> anyhow::Result<u32> {
             let memory = caller.data_mut().memory.unwrap();
             let (data, host) = memory.data_and_store_mut(&mut caller);
             let text = data
-                .get(ptr as usize..)
+                .get(text_ptr as usize..)
                 .and_then(|arr| arr.iter().position(|&x| x == 0))
-                .and_then(|len| std::str::from_utf8(&data[ptr as usize..][..len]).ok())
+                .and_then(|len| std::str::from_utf8(&data[text_ptr as usize..][..len]).ok())
                 .ok_or_else(|| anyhow!("invalid UTF-8 string"))?;
-            let res = host.lcd.set_line(line, text);
 
-            Ok(res.into())
+            let res = host.lcd.set_line(line, text);
+            Ok(res.use_errno(&mut caller).into())
         },
     )?;
 
     linker.func_wrap(
         "env",
         "lcd_clear_line",
-        |mut caller: Caller<'_, Host>, line: u32| -> anyhow::Result<u32> {
+        |mut caller: Caller<'_, Host>, line: i32| -> anyhow::Result<u32> {
             let host = caller.data_mut();
             let res = host.lcd.set_line(line, "");
-
-            Ok(res.into())
+            Ok(res.use_errno(&mut caller).into())
         },
     )?;
 
@@ -58,8 +59,7 @@ fn main() -> Result<()> {
         |mut caller: Caller<'_, Host>| -> anyhow::Result<u32> {
             let host = caller.data_mut();
             let res = host.lcd.clear();
-
-            Ok(res.into())
+            Ok(res.use_errno(&mut caller).into())
         },
     )?;
 
@@ -77,6 +77,10 @@ fn main() -> Result<()> {
 
     linker.func_wrap("env", "delay", |millis: u32| {
         sleep(Duration::from_millis(millis.into()));
+    })?;
+
+    linker.func_wrap("env", "__errno", |mut caller: Caller<'_, Host>| -> u32 {
+        caller.errno_address()
     })?;
 
     linker.func_wrap(

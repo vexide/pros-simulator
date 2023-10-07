@@ -7,5 +7,6 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.75"
+pros-sys = { version = "0.3", features = ["no-link"] }
 wasmtime = "12.0.1"
 wasmtime-wasi = "12.0.1"
