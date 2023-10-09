@@ -4,6 +4,10 @@ use tokio::sync::Mutex;
 use wasmtime::{AsContextMut, Caller, Instance, Memory, TypedFunc};
 
 pub mod lcd;
+pub mod thread_local;
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct Task;
 
 use lcd::Lcd;
 
@@ -97,11 +101,9 @@ impl<'a> ErrnoExt for Caller<'a, Host> {
         let address = self.errno_address().await;
 
         let memory = self.data().lock().await.memory.unwrap();
-        let memory_data = memory.data_mut(&mut *self);
-        let errno_bytes = &mut memory_data
-            .get_mut(address as usize..)
-            .expect("expected valid pointer")[0..][..ERRNO_LAYOUT.size()];
-        errno_bytes.clone_from_slice(&new_errno.to_le_bytes());
+        memory
+            .write(&mut *self, address as usize, &new_errno.to_le_bytes())
+            .unwrap();
     }
 }
 
