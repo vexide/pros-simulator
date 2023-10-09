@@ -8,60 +8,62 @@ use wasmtime::*;
 
 pub mod host;
 
-fn main() -> Result<()> {
-    // Define the WASI functions globally on the `Config`.
-    let engine = Engine::default();
+#[tokio::main]
+async fn main() -> Result<()> {
+    let engine = Engine::new(Config::new().async_support(true)).unwrap();
     let mut linker = Linker::<Host>::new(&engine);
     let mut store = Store::new(&engine, Host::default());
 
-    // lcd_initialize
-    linker.func_wrap(
-        "env",
-        "lcd_initialize",
-        |mut caller: Caller<'_, Host>| -> anyhow::Result<u32> {
-            let host = caller.data_mut();
+    linker.func_wrap0_async("env", "lcd_initialize", |mut caller: Caller<'_, Host>| {
+        Box::new(async move {
+            let mut host = caller.data_mut().lock().await;
             let res = host.lcd.initialize();
+            drop(host);
 
-            Ok(res.is_ok().into())
-        },
-    )?;
+            Ok(u32::from(res.is_ok()))
+        })
+    })?;
 
-    linker.func_wrap(
+    linker.func_wrap2_async(
         "env",
         "lcd_set_text",
-        |mut caller: Caller<'_, Host>, line: i32, text_ptr: u32| -> anyhow::Result<u32> {
-            let memory = caller.data_mut().memory.unwrap();
-            let (data, host) = memory.data_and_store_mut(&mut caller);
-            let text = data
-                .get(text_ptr as usize..)
-                .and_then(|arr| arr.iter().position(|&x| x == 0))
-                .and_then(|len| std::str::from_utf8(&data[text_ptr as usize..][..len]).ok())
-                .ok_or_else(|| anyhow!("invalid UTF-8 string"))?;
+        |mut caller: Caller<'_, Host>, line: i32, text_ptr: u32| {
+            Box::new(async move {
+                let memory = caller.data_mut().lock().await.memory.unwrap();
+                let (data, host) = memory.data_and_store_mut(&mut caller);
+                let text = data
+                    .get(text_ptr as usize..)
+                    .and_then(|arr| arr.iter().position(|&x| x == 0))
+                    .and_then(|len| std::str::from_utf8(&data[text_ptr as usize..][..len]).ok())
+                    .ok_or_else(|| anyhow!("invalid UTF-8 string"))?;
 
-            let res = host.lcd.set_line(line, text);
-            Ok(res.use_errno(&mut caller).into())
+                let res = host.lock().await.lcd.set_line(line, text);
+                Ok(u32::from(res.use_errno(&mut caller).await))
+            })
         },
     )?;
 
-    linker.func_wrap(
+    linker.func_wrap1_async(
         "env",
         "lcd_clear_line",
-        |mut caller: Caller<'_, Host>, line: i32| -> anyhow::Result<u32> {
-            let host = caller.data_mut();
-            let res = host.lcd.clear_line(line);
-            Ok(res.use_errno(&mut caller).into())
+        |mut caller: Caller<'_, Host>, line: i32| {
+            Box::new(async move {
+                let mut host = caller.data_mut().lock().await;
+                let res = host.lcd.clear_line(line);
+                drop(host);
+                Ok(u32::from(res.use_errno(&mut caller).await))
+            })
         },
     )?;
 
-    linker.func_wrap(
-        "env",
-        "lcd_clear",
-        |mut caller: Caller<'_, Host>| -> anyhow::Result<u32> {
-            let host = caller.data_mut();
+    linker.func_wrap0_async("env", "lcd_clear", |mut caller: Caller<'_, Host>| {
+        Box::new(async move {
+            let mut host = caller.data_mut().lock().await;
             let res = host.lcd.clear();
-            Ok(res.use_errno(&mut caller).into())
-        },
-    )?;
+            drop(host);
+            Ok(u32::from(res.use_errno(&mut caller).await))
+        })
+    })?;
 
     // mutexes are currently a no-op because threads aren't implemented yet
 
@@ -75,12 +77,15 @@ fn main() -> Result<()> {
         true.into()
     })?;
 
-    linker.func_wrap("env", "delay", |millis: u32| {
-        sleep(Duration::from_millis(millis.into()));
+    linker.func_wrap1_async("env", "delay", |_caller: Caller<'_, Host>, millis: u32| {
+        Box::new(async move {
+            sleep(Duration::from_millis(millis.into()));
+            Ok(())
+        })
     })?;
 
-    linker.func_wrap("env", "__errno", |mut caller: Caller<'_, Host>| -> u32 {
-        caller.errno_address()
+    linker.func_wrap0_async("env", "__errno", |mut caller: Caller<'_, Host>| {
+        Box::new(async move { caller.errno_address().await })
     })?;
 
     linker.func_wrap(
@@ -94,16 +99,16 @@ fn main() -> Result<()> {
     // Instantiate our module with the imports we've created, and run it.
     let module = Module::from_file(&engine, "./example.wasm")?;
 
-    let instance = linker.instantiate(&mut store, &module)?;
+    let instance = linker.instantiate_async(&mut store, &module).await?;
 
     let memory = instance
         .get_memory(&mut store, "memory")
         .expect("Robot code should export memory");
-    store.data_mut().memory = Some(memory);
+    store.data_mut().lock().await.memory = Some(memory);
 
     // Like before, we can get the run function and execute it.
     let run = instance.get_typed_func::<(), ()>(&mut store, "initialize")?;
-    run.call(&mut store, ())?;
+    run.call_async(&mut store, ()).await?;
 
     Ok(())
 }

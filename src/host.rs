@@ -1,10 +1,19 @@
+use async_trait::async_trait;
 use std::{alloc::Layout, collections::HashSet};
+use tokio::sync::Mutex;
 use wasmtime::{AsContextMut, Caller, Instance, Memory, TypedFunc};
 
 pub mod lcd;
 
 use lcd::Lcd;
 
+/// This struct contains the functions necessary to send buffers to the sandbox.
+/// By letting the sandboxed allocator know that we want to write a buffer
+/// it can tell us where to put it without overriding anything important
+/// in the sandbox's heap.
+///
+/// `wasm_memalign` is used to request a place to write a buffer, and `wasm_free` is
+/// used to tell the sandbox that we're done with the buffer.
 #[derive(Clone)]
 pub struct WasmAllocator {
     wasm_memalign: TypedFunc<(u32, u32), u32>,
@@ -23,12 +32,17 @@ impl WasmAllocator {
         }
     }
 
-    pub fn memalign(&self, mut store: impl AsContextMut, layout: Layout) -> u32 {
+    pub async fn memalign(
+        &self,
+        mut store: impl AsContextMut<Data = impl Send>,
+        layout: Layout,
+    ) -> u32 {
         let size = layout.size().try_into().unwrap();
         let alignment = layout.align().try_into().unwrap();
         let ptr = self
             .wasm_memalign
-            .call(&mut store, (alignment, size))
+            .call_async(&mut store, (alignment, size))
+            .await
             .unwrap();
         if ptr == 0 {
             panic!("wasm_memalign failed");
@@ -36,13 +50,15 @@ impl WasmAllocator {
         ptr
     }
 
-    pub fn free(&self, mut store: impl AsContextMut, ptr: u32) {
-        self.wasm_free.call(&mut store, ptr).unwrap()
+    pub async fn free(&self, mut store: impl AsContextMut<Data = impl Send>, ptr: u32) {
+        self.wasm_free.call_async(&mut store, ptr).await.unwrap()
     }
 }
 
+pub type Host = Mutex<InnerHost>;
+
 #[derive(Default)]
-pub struct Host {
+pub struct InnerHost {
     pub autonomous: Option<TypedFunc<(), ()>>,
     pub initialize: Option<TypedFunc<(), ()>>,
     pub disabled: Option<TypedFunc<(), ()>>,
@@ -58,37 +74,39 @@ pub struct Host {
 
 pub const ERRNO_LAYOUT: Layout = Layout::new::<i32>();
 
+#[async_trait]
 pub trait ErrnoExt {
-    fn errno_address(&mut self) -> u32;
-    fn set_errno(&mut self, new_errno: i32);
+    async fn errno_address(&mut self) -> u32;
+    async fn set_errno(&mut self, new_errno: i32);
 }
 
+#[async_trait]
 impl<'a> ErrnoExt for Caller<'a, Host> {
-    fn errno_address(&mut self) -> u32 {
-        self.as_context_mut()
-            .data()
-            .errno_address
-            .unwrap_or_else(|| {
-                let allocator = self.data().wasm_allocator.clone();
-                let errno_address = allocator.unwrap().memalign(&mut *self, ERRNO_LAYOUT);
-                self.data_mut().errno_address = Some(errno_address);
-                errno_address
-            })
+    async fn errno_address(&mut self) -> u32 {
+        let data = self.data().lock().await;
+        if let Some(errno_address) = data.errno_address {
+            return errno_address;
+        }
+        let allocator = data.wasm_allocator.clone();
+        drop(data);
+        let errno_address = allocator.unwrap().memalign(&mut *self, ERRNO_LAYOUT).await;
+        self.data_mut().lock().await.errno_address = Some(errno_address);
+        errno_address
     }
-    fn set_errno(&mut self, new_errno: i32) {
-        let address = self.errno_address();
+    async fn set_errno(&mut self, new_errno: i32) {
+        let address = self.errno_address().await;
 
-        let memory = self.data().memory.unwrap().data_mut(&mut *self);
-        let data = &mut memory
+        let memory = self.data().lock().await.memory.unwrap();
+        let memory_data = memory.data_mut(&mut *self);
+        let errno_bytes = &mut memory_data
             .get_mut(address as usize..)
             .expect("expected valid pointer")[0..][..ERRNO_LAYOUT.size()];
-        data.clone_from_slice(&new_errno.to_le_bytes());
+        errno_bytes.clone_from_slice(&new_errno.to_le_bytes());
     }
 }
 
+#[async_trait]
 pub trait ResultExt {
-    /// If this result is an error, sets the simulator's [`errno`](Host::errno_address) to the Err value.
-    fn set_errno(&self, caller: &mut Caller<'_, Host>);
     /// If this result is an error, sets the simulator's [`errno`](Host::errno_address) to the Err value.
     /// Returns `true` if the result was Ok and `false` if it was Err.
     ///
@@ -96,19 +114,17 @@ pub trait ResultExt {
     ///
     /// ```ignore
     /// let res = host.lcd.set_line(line, "");
-    /// Ok(res.use_errno(&mut caller).into())
+    /// Ok(res.use_errno(&mut caller).await.into())
     /// ```
-    fn use_errno(&self, caller: &mut Caller<'_, Host>) -> bool;
+    async fn use_errno(self, caller: &mut Caller<'_, Host>) -> bool;
 }
 
-impl<T> ResultExt for Result<T, i32> {
-    fn set_errno(&self, caller: &mut Caller<'_, Host>) {
+#[async_trait]
+impl<T: Send> ResultExt for Result<T, i32> {
+    async fn use_errno(self, caller: &mut Caller<'_, Host>) -> bool {
         if let Err(errno) = self {
-            caller.set_errno(*errno);
+            caller.set_errno(errno).await;
         }
-    }
-    fn use_errno(&self, caller: &mut Caller<'_, Host>) -> bool {
-        self.set_errno(caller);
         self.is_ok()
     }
 }
