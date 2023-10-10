@@ -20,6 +20,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0942ffc6dcaadf03badf6e6a2d0228460359d5e34b57ccdc720b7382dfbd5ec5"
 
 [[package]]
+name = "async-trait"
+version = "0.1.73"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc00ceb34980c03614e35a3a4e218276a0a824e911d07651cd0d858a51e8c0f0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.38",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -185,8 +196,9 @@ dependencies = [
 [[package]]
 name = "pros"
 version = "0.0.10-rc.1"
-source = "git+https://github.com/pros-rs/pros-rs?branch=async_runtime#a3a5ddbc8049130d74fd326ebd71f3e14b5b3aa7"
+source = "git+https://github.com/pros-rs/pros-rs?branch=async_runtime#430ee755e806bfb43d77990d0589d97b26ddf640"
 dependencies = [
+ "async-trait",
  "futures",
  "hashbrown",
  "lazy_static",
@@ -200,7 +212,7 @@ dependencies = [
 [[package]]
 name = "pros-sys"
 version = "0.3.0"
-source = "git+https://github.com/pros-rs/pros-rs?branch=async_runtime#a3a5ddbc8049130d74fd326ebd71f3e14b5b3aa7"
+source = "git+https://github.com/pros-rs/pros-rs?branch=async_runtime#430ee755e806bfb43d77990d0589d97b26ddf640"
 dependencies = [
  "cfg-if",
 ]
@@ -248,7 +260,7 @@ dependencies = [
  "heck",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -271,6 +283,17 @@ name = "syn"
 version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "unicode-ident",
+]
+
+[[package]]
+name = "syn"
+version = "2.0.38"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e96b79aaa137db8f61e26363a0c9b47d8b4ec75da28b7d1d614c2303e232408b"
 dependencies = [
  "proc-macro2",
  "quote",

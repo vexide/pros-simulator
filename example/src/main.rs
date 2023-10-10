@@ -3,7 +3,7 @@ use pros::prelude::{println, *};
 use pros::task::sleep;
 use std::time::Duration;
 
-struct SimRobot;
+pub struct SimRobot;
 impl Default for SimRobot {
     fn default() -> Self {
         pros::async_runtime::block_on(async {
@@ -14,7 +14,5 @@ impl Default for SimRobot {
         SimRobot
     }
 }
-impl Robot for SimRobot {
-
-}
+impl Robot for SimRobot {}
 robot!(SimRobot);
