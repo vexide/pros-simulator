@@ -5,7 +5,7 @@ use wasmtime::{Caller, Engine, Instance, Linker, Module, Store};
 
 use crate::host::{thread_local::CallerExt, ErrnoExt, Host, ResultExt};
 
-pub async fn create_runtime(
+pub async fn create_linker(
     engine: &Engine,
     module: &Module,
 ) -> anyhow::Result<(Instance, Store<Host>)> {

@@ -1,4 +1,5 @@
 pub mod lcd;
+pub mod memory;
 pub mod task;
 pub mod thread_local;
 
@@ -10,7 +11,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::Mutex;
-use wasmtime::{AsContextMut, Caller, Instance, Memory, TypedFunc};
+use wasmtime::{AsContextMut, Caller, Engine, Instance, Memory, SharedMemory, TypedFunc};
 
 use self::{task::TaskPool, thread_local::TaskStorage};
 
@@ -64,54 +65,36 @@ impl WasmAllocator {
 
 pub type Host = Arc<Mutex<InnerHost>>;
 
-#[derive(Default)]
 pub struct InnerHost {
     pub autonomous: Option<TypedFunc<(), ()>>,
     pub initialize: Option<TypedFunc<(), ()>>,
     pub disabled: Option<TypedFunc<(), ()>>,
     pub competition_initialize: Option<TypedFunc<(), ()>>,
     pub op_control: Option<TypedFunc<(), ()>>,
-    pub memory: Option<Memory>,
+    pub memory: SharedMemory,
     pub lcd: Lcd,
     /// Pointers to mutexes created with mutex_create
     pub mutexes: HashSet<u32>,
     pub wasm_allocator: Option<WasmAllocator>,
-    pub errno_address: Option<u32>,
     pub tasks: TaskPool,
-    pub next_task_handle: u32,
 }
 
-pub const ERRNO_LAYOUT: Layout = Layout::new::<i32>();
-
-#[async_trait]
-pub trait ErrnoExt {
-    async fn errno_address(&mut self) -> u32;
-    async fn set_errno(&mut self, new_errno: i32);
-}
-
-#[async_trait]
-impl<'a> ErrnoExt for Caller<'a, Host> {
-    async fn errno_address(&mut self) -> u32 {
-        let data = self.data().lock().await;
-        if let Some(errno_address) = data.errno_address {
-            return errno_address;
+impl InnerHost {
+    pub fn new(engine: Engine, memory: SharedMemory) -> Self {
+        Self {
+            autonomous: None,
+            initialize: None,
+            disabled: None,
+            competition_initialize: None,
+            op_control: None,
+            memory,
+            lcd: Lcd::default(),
+            mutexes: HashSet::default(),
+            wasm_allocator: None,
+            tasks: TaskPool::new(engine),
         }
-        let allocator = data.wasm_allocator.clone();
-        drop(data);
-        let errno_address = allocator.unwrap().memalign(&mut *self, ERRNO_LAYOUT).await;
-        self.data_mut().lock().await.errno_address = Some(errno_address);
-        errno_address
-    }
-    async fn set_errno(&mut self, new_errno: i32) {
-        let address = self.errno_address().await;
-
-        let memory = self.data().lock().await.memory.unwrap();
-        memory
-            .write(&mut *self, address as usize, &new_errno.to_le_bytes())
-            .unwrap();
     }
 }
-
 #[async_trait]
 pub trait ResultExt {
     /// If this result is an error, sets the simulator's [`errno`](Host::errno_address) to the Err value.
@@ -129,8 +112,11 @@ pub trait ResultExt {
 #[async_trait]
 impl<T: Send> ResultExt for Result<T, i32> {
     async fn use_errno(self, caller: &mut Caller<'_, Host>) -> bool {
-        if let Err(errno) = self {
-            caller.set_errno(errno).await;
+        if let Err(code) = self {
+            let data = caller.data_mut().lock().await;
+            let current_task = data.tasks.current();
+            let errno = current_task.lock().await.errno().await;
+            errno.set(&data.memory, code);
         }
         self.is_ok()
     }
