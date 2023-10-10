@@ -2,6 +2,7 @@ use std::{thread::sleep, time::Duration};
 
 use anyhow::bail;
 use anyhow::{anyhow, Result};
+use host::thread_local::CallerExt;
 use host::ErrnoExt;
 use host::Host;
 use host::ResultExt;
@@ -83,22 +84,32 @@ async fn main() -> Result<()> {
         "pvTaskGetThreadLocalStoragePointer",
         |mut caller: Caller<'_, Host>, task_handle: u32, storage_index: i32| {
             Box::new(async move {
-                let mut host = caller.data_mut().lock().await;
-                let allocator = host.wasm_allocator.clone().unwrap();
-                let Some(task) = host.tasks.by_id(task_handle) else {
-                    bail!("invalid task handle: {task_handle}");
-                };
-                drop(host);
-
-                let storage = task
-                    .lock()
-                    .await
-                    .local_storage(&mut caller, &allocator)
-                    .await;
+                let storage = caller.task_storage(task_handle).await;
                 Ok(storage.get_address(storage_index))
             })
         },
     )?;
+
+    linker.func_wrap3_async(
+        "env",
+        "vTaskSetThreadLocalStoragePointer",
+        |mut caller: Caller<'_, Host>, task_handle: u32, storage_index: i32, address: u32| {
+            Box::new(async move {
+                let mut storage = caller.task_storage(task_handle).await;
+                let data = caller.data_mut().lock().await;
+                let memory = data.memory.unwrap();
+                drop(data);
+                storage.set_address(&mut caller, memory, storage_index, address)
+            })
+        },
+    )?;
+
+    linker.func_wrap0_async("env", "task_get_current", |caller: Caller<'_, Host>| {
+        Box::new(async move {
+            let data = caller.data().lock().await;
+            data.tasks.current().lock().await.id()
+        })
+    })?;
 
     linker.func_wrap1_async("env", "delay", |_caller: Caller<'_, Host>, millis: u32| {
         Box::new(async move {

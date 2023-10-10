@@ -30,6 +30,9 @@ impl Task {
         self.local_storage = Some(storage);
         storage
     }
+    pub fn id(&self) -> u32 {
+        self.id
+    }
 }
 impl PartialEq for Task {
     fn eq(&self, other: &Self) -> bool {
@@ -43,14 +46,14 @@ pub type TaskHandle = Arc<Mutex<Task>>;
 #[derive(Default)]
 pub struct TaskPool {
     tasks: HashMap<u32, TaskHandle>,
-    next_task_id: u32,
+    newest_task_id: u32,
     current_task: Option<TaskHandle>,
 }
 
 impl TaskPool {
     pub fn spawn(&mut self, task_impl: TypedFunc<(), ()>) -> TaskHandle {
-        let id = self.next_task_id;
-        self.next_task_id += 1;
+        self.newest_task_id += 1;
+        let id = self.newest_task_id;
 
         let task = Task::new(id, task_impl);
         self.tasks.insert(id, task.clone());
@@ -59,12 +62,14 @@ impl TaskPool {
 
     pub fn by_id(&mut self, task_id: u32) -> Option<TaskHandle> {
         if task_id == 0 {
-            return Some(
-                self.current_task
-                    .clone()
-                    .expect("getting the current task should only happen while a task is being executed"),
-            );
+            return Some(self.current());
         }
         self.tasks.get(&task_id).cloned()
+    }
+
+    pub fn current(&self) -> TaskHandle {
+        self.current_task
+            .clone()
+            .expect("using the current task may only happen while a task is being executed")
     }
 }

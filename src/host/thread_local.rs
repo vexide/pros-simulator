@@ -1,8 +1,9 @@
 use std::{collections::HashMap, mem::size_of};
 
-use wasmtime::{AsContextMut, Memory};
+use async_trait::async_trait;
+use wasmtime::{AsContextMut, Caller, Memory};
 
-use super::WasmAllocator;
+use super::{Host, WasmAllocator};
 
 pub const NUM_THREAD_LOCAL_STORAGE_POINTERS: usize = 5;
 
@@ -70,5 +71,23 @@ impl TaskStorage {
         let address = self.get_address(index);
         let buffer = value.to_le_bytes();
         memory.write(store, address as usize, &buffer).unwrap();
+    }
+}
+
+#[async_trait]
+pub trait CallerExt {
+    async fn task_storage(&mut self, task_handle: u32) -> TaskStorage;
+}
+
+#[async_trait]
+impl<'a> CallerExt for Caller<'a, Host> {
+    async fn task_storage(&mut self, task_handle: u32) -> TaskStorage {
+        let mut data = self.data_mut().lock().await;
+        let allocator = data.wasm_allocator.clone().unwrap();
+        let task = data.tasks.by_id(task_handle).expect("invalid task handle");
+        drop(data);
+
+        let mut task = task.lock().await;
+        task.local_storage(self, &allocator).await
     }
 }
