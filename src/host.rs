@@ -62,7 +62,7 @@ impl WasmAllocator {
     }
 }
 
-pub type Host = Mutex<InnerHost>;
+pub type Host = Arc<Mutex<InnerHost>>;
 
 #[derive(Default)]
 pub struct InnerHost {

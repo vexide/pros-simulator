@@ -1,23 +1,16 @@
-use std::collections::HashMap;
-use std::future::Future;
 use std::{thread::sleep, time::Duration};
 
-use anyhow::bail;
-use anyhow::{anyhow, Result};
-use host::thread_local::CallerExt;
-use host::ErrnoExt;
-use host::Host;
-use host::ResultExt;
-use wasmtime::*;
+use anyhow::anyhow;
+use wasmtime::{Caller, Engine, Instance, Linker, Module, Store};
 
-pub mod host;
-pub mod runtime;
+use crate::host::{thread_local::CallerExt, ErrnoExt, Host, ResultExt};
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<()> {
-    let engine = Engine::new(Config::new().async_support(true).wasm_threads(true)).unwrap();
-    let mut linker = Linker::<Host>::new(&engine);
-    let mut store = Store::new(&engine, Host::default());
+pub async fn create_runtime(
+    engine: &Engine,
+    module: &Module,
+) -> anyhow::Result<(Instance, Store<Host>)> {
+    let mut linker = Linker::<Host>::new(engine);
+    let mut store = Store::new(engine, Host::default());
 
     linker.func_wrap0_async("env", "lcd_initialize", |mut caller: Caller<'_, Host>| {
         Box::new(async move {
@@ -133,45 +126,5 @@ async fn main() -> Result<()> {
         },
     )?;
 
-    // Instantiate our module with the imports we've created, and run it.
-    let module = Module::from_file(&engine, "./example.wasm")?;
-
-    let instance = linker.instantiate_async(&mut store, &module).await?;
-
-    let memory = instance
-        .get_memory(&mut store, "memory")
-        .expect("Robot code should export memory");
-    store.data_mut().lock().await.memory = Some(memory);
-
-    // Like before, we can get the run function and execute it.
-    let initialize = instance.get_typed_func::<(), ()>(&mut store, "initialize")?;
-
-    initialize.call_async(&mut store, ()).await?;
-
-    Ok(())
-}
-
-async fn initialize_robot(instance: Instance, mut store: Store<Host>) {
-    let initialize = instance
-        .get_typed_func::<(), ()>(&mut store, "initialize")
-        .unwrap();
-
-    {
-        let store_data = store.data().clone();
-        let mut host = store_data.lock().await;
-        let task = host.tasks.spawn(initialize);
-    }
-
-    let mut futures = HashMap::<u32, Box<dyn Future<Output = anyhow::Result<()>>>>::new();
-    loop {
-        let mut host = store.data_mut().lock().await;
-        let running = host.tasks.next_task().await;
-        if !running {
-            break;
-        }
-
-        let task = host.tasks.current();
-        let mut task = task.lock().await;
-        let future = task.start(&mut store);
-    }
+    Ok((linker.instantiate_async(&mut store, module).await?, store))
 }
