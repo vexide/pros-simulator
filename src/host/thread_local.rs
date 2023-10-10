@@ -81,6 +81,6 @@ impl<'a> CallerExt for Caller<'a, Host> {
         drop(data);
 
         let mut task = task.lock().await;
-        task.local_storage().await
+        task.local_storage(self).await
     }
 }

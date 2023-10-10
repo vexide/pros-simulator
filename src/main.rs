@@ -1,16 +1,18 @@
 use std::collections::HashMap;
 use std::future::Future;
 use std::sync::Arc;
-use std::{thread::sleep, time::Duration};
+use std::time::Duration;
 
 use anyhow::bail;
 use anyhow::{anyhow, Result};
 use host::memory::SharedMemoryExt;
+use host::task::TaskPool;
 use host::thread_local::CallerExt;
 use host::Host;
 use host::InnerHost;
 use host::ResultExt;
 use tokio::sync::Mutex;
+use tokio::time::sleep;
 use wasmtime::*;
 
 pub mod host;
@@ -121,7 +123,7 @@ async fn main() -> Result<()> {
 
     linker.func_wrap1_async("env", "delay", |_caller: Caller<'_, Host>, millis: u32| {
         Box::new(async move {
-            sleep(Duration::from_millis(millis.into()));
+            sleep(Duration::from_millis(millis.into())).await;
             Ok(())
         })
     })?;
@@ -130,7 +132,8 @@ async fn main() -> Result<()> {
         Box::new(async move {
             let data = caller.data_mut().lock().await;
             let current_task = data.tasks.current();
-            let errno = current_task.lock().await.errno().await;
+            drop(data);
+            let errno = current_task.lock().await.errno(&mut caller).await;
             Ok(errno.address())
         })
     })?;
@@ -150,33 +153,11 @@ async fn main() -> Result<()> {
 
     // Like before, we can get the run function and execute it.
     let initialize = instance.get_typed_func::<(), ()>(&mut store, "initialize")?;
-
-    initialize.call_async(&mut store, ()).await?;
+    {
+        let mut host = host.lock().await;
+        host.tasks.spawn(instance, store, initialize);
+    }
+    TaskPool::run_to_completion(&host).await;
 
     Ok(())
 }
-
-// async fn initialize_robot(instance: Instance, mut store: Store<Host>) {
-//     let initialize = instance
-//         .get_typed_func::<(), ()>(&mut store, "initialize")
-//         .unwrap();
-
-//     {
-//         let store_data = store.data().clone();
-//         let mut host = store_data.lock().await;
-//         let task = host.tasks.spawn(initialize);
-//     }
-
-//     let mut futures = HashMap::<u32, Box<dyn Future<Output = anyhow::Result<()>>>>::new();
-//     loop {
-//         let mut host = store.data_mut().lock().await;
-//         let running = host.tasks.next_task().await;
-//         if !running {
-//             break;
-//         }
-
-//         let task = host.tasks.current();
-//         let mut task = task.lock().await;
-//         let future = task.start(&mut store);
-//     }
-// }

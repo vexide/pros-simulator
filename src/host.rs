@@ -115,8 +115,10 @@ impl<T: Send> ResultExt for Result<T, i32> {
         if let Err(code) = self {
             let data = caller.data_mut().lock().await;
             let current_task = data.tasks.current();
-            let errno = current_task.lock().await.errno().await;
-            errno.set(&data.memory, code);
+            let memory = data.memory.clone();
+            drop(data);
+            let errno = current_task.lock().await.errno(caller).await;
+            errno.set(&memory, code);
         }
         self.is_ok()
     }
