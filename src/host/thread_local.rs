@@ -2,31 +2,31 @@ use std::{collections::HashMap, mem::size_of};
 
 use wasmtime::{AsContextMut, Memory};
 
-use super::{Task, WasmAllocator};
+use super::WasmAllocator;
 
 pub const NUM_THREAD_LOCAL_STORAGE_POINTERS: usize = 5;
 
-#[derive(Debug, Default)]
-pub struct ThreadLocalStorage {
-    pub tasks: HashMap<Task, TaskStorage>,
-}
+// #[derive(Debug, Default)]
+// pub struct ThreadLocalStorage {
+//     pub tasks: HashMap<Task, TaskStorage>,
+// }
 
-impl ThreadLocalStorage {
-    pub async fn get(
-        &mut self,
-        store: impl AsContextMut<Data = impl Send>,
-        allocator: &WasmAllocator,
-        task: Task,
-    ) -> TaskStorage {
-        if let Some(storage) = self.tasks.get(&task) {
-            return *storage;
-        }
+// impl ThreadLocalStorage {
+//     pub async fn get(
+//         &mut self,
+//         store: impl AsContextMut<Data = impl Send>,
+//         allocator: &WasmAllocator,
+//         task: Task,
+//     ) -> TaskStorage {
+//         if let Some(storage) = self.tasks.get(&task) {
+//             return *storage;
+//         }
 
-        let storage = TaskStorage::new(store, allocator).await;
-        self.tasks.insert(task, storage);
-        storage
-    }
-}
+//         let storage = TaskStorage::new(store, allocator).await;
+//         self.tasks.insert(task, storage);
+//         storage
+//     }
+// }
 
 #[derive(Debug, Clone, Copy)]
 pub struct TaskStorage {

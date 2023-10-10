@@ -1,5 +1,6 @@
 use std::{thread::sleep, time::Duration};
 
+use anyhow::bail;
 use anyhow::{anyhow, Result};
 use host::ErrnoExt;
 use host::Host;
@@ -76,6 +77,28 @@ async fn main() -> Result<()> {
     linker.func_wrap("env", "mutex_take", |_mutex: u32, _timeout: u32| -> u32 {
         true.into()
     })?;
+
+    linker.func_wrap2_async(
+        "env",
+        "pvTaskGetThreadLocalStoragePointer",
+        |mut caller: Caller<'_, Host>, task_handle: u32, storage_index: i32| {
+            Box::new(async move {
+                let mut host = caller.data_mut().lock().await;
+                let allocator = host.wasm_allocator.clone().unwrap();
+                let Some(task) = host.tasks.by_id(task_handle) else {
+                    bail!("invalid task handle: {task_handle}");
+                };
+                drop(host);
+
+                let storage = task
+                    .lock()
+                    .await
+                    .local_storage(&mut caller, &allocator)
+                    .await;
+                Ok(storage.get_address(storage_index))
+            })
+        },
+    )?;
 
     linker.func_wrap1_async("env", "delay", |_caller: Caller<'_, Host>, millis: u32| {
         Box::new(async move {

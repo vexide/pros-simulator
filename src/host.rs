@@ -1,15 +1,18 @@
+pub mod lcd;
+pub mod task;
+pub mod thread_local;
+
 use async_trait::async_trait;
-use std::{alloc::Layout, collections::HashSet};
+use lcd::Lcd;
+use std::{
+    alloc::Layout,
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 use tokio::sync::Mutex;
 use wasmtime::{AsContextMut, Caller, Instance, Memory, TypedFunc};
 
-pub mod lcd;
-pub mod thread_local;
-
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct Task;
-
-use lcd::Lcd;
+use self::{task::TaskPool, thread_local::TaskStorage};
 
 /// This struct contains the functions necessary to send buffers to the sandbox.
 /// By letting the sandboxed allocator know that we want to write a buffer
@@ -74,6 +77,8 @@ pub struct InnerHost {
     pub mutexes: HashSet<u32>,
     pub wasm_allocator: Option<WasmAllocator>,
     pub errno_address: Option<u32>,
+    pub tasks: TaskPool,
+    pub next_task_handle: u32,
 }
 
 pub const ERRNO_LAYOUT: Layout = Layout::new::<i32>();
