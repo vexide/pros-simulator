@@ -9,6 +9,7 @@ use std::{
     alloc::Layout,
     collections::{HashMap, HashSet},
     sync::Arc,
+    time::Instant,
 };
 use tokio::sync::Mutex;
 use wasmtime::{AsContextMut, Caller, Engine, Instance, Memory, SharedMemory, TypedFunc};
@@ -77,6 +78,7 @@ pub struct InnerHost {
     pub mutexes: HashSet<u32>,
     pub wasm_allocator: Option<WasmAllocator>,
     pub tasks: TaskPool,
+    pub start_time: Instant,
 }
 
 impl InnerHost {
@@ -92,6 +94,7 @@ impl InnerHost {
             mutexes: HashSet::default(),
             wasm_allocator: None,
             tasks: TaskPool::new(engine),
+            start_time: Instant::now(),
         }
     }
 }

@@ -138,6 +138,15 @@ async fn main() -> Result<()> {
         })
     })?;
 
+    linker.func_wrap0_async("env", "millis", |mut caller: Caller<'_, Host>| {
+        Box::new(async move {
+            let data = caller.data_mut().lock().await;
+            let start_time = data.start_time;
+            drop(data);
+            Ok(start_time.elapsed().as_millis() as u32)
+        })
+    })?;
+
     linker.func_wrap(
         "env",
         "__main_argc_argv",
