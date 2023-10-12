@@ -17,28 +17,12 @@
                 "filter": {
                     "name": "pros-simulator",
                     "kind": "bin"
-                }
+                },
             },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug unit tests in executable 'pros-simulator'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--bin=pros-simulator",
-                    "--package=pros-simulator"
-                ],
-                "filter": {
-                    "name": "pros-simulator",
-                    "kind": "bin"
-                }
-            },
-            "args": [],
+            "args": [
+                "./example/target/wasm32-unknown-unknown/debug/example.wasm"
+            ],
+            "preLaunchTask": "rust: cargo build",
             "cwd": "${workspaceFolder}"
         }
     ]

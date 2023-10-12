@@ -61,7 +61,16 @@ impl TaskStorage {
 
         self.base_ptr + (index as u32 * size_of::<u32>() as u32)
     }
-    pub fn set_address(&mut self, memory: SharedMemory, index: i32, value: u32) {
+    pub fn get(&self, memory: SharedMemory, index: i32) -> u32 {
+        Self::assert_in_bounds(index);
+        let address = self.get_address(index);
+        let buffer = memory
+            .read_relaxed(address as usize, size_of::<u32>())
+            .unwrap();
+        u32::from_le_bytes(buffer.try_into().unwrap())
+    }
+    pub fn set(&mut self, memory: SharedMemory, index: i32, value: u32) {
+        Self::assert_in_bounds(index);
         let address = self.get_address(index);
         let buffer = value.to_le_bytes();
         memory.write_relaxed(address as usize, &buffer).unwrap();

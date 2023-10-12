@@ -20,7 +20,18 @@ pub mod host;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
-    let engine = Engine::new(Config::new().async_support(true).wasm_threads(true)).unwrap();
+    let args = std::env::args().collect::<Vec<_>>();
+    let binary_name = args
+        .get(1)
+        .ok_or_else(|| anyhow!("missing argument: need path to wasm"))?;
+
+    let engine = Engine::new(
+        Config::new()
+            .async_support(true)
+            .wasm_threads(true)
+            .debug_info(true),
+    )
+    .unwrap();
     let shared_memory = SharedMemory::new(&engine, MemoryType::shared(18, 16384))?;
     let host = Arc::new(Mutex::new(InnerHost::new(
         engine.clone(),
@@ -95,7 +106,9 @@ async fn main() -> Result<()> {
         |mut caller: Caller<'_, Host>, task_handle: u32, storage_index: i32| {
             Box::new(async move {
                 let storage = caller.task_storage(task_handle).await;
-                Ok(storage.get_address(storage_index))
+                let data = caller.data_mut().lock().await;
+                let memory = data.memory.clone();
+                Ok(storage.get(memory, storage_index))
             })
         },
     )?;
@@ -109,7 +122,7 @@ async fn main() -> Result<()> {
                 let data = caller.data_mut().lock().await;
                 let memory = data.memory.clone();
                 drop(data);
-                storage.set_address(memory, storage_index, address)
+                storage.set(memory, storage_index, address)
             })
         },
     )?;
@@ -156,7 +169,7 @@ async fn main() -> Result<()> {
     )?;
 
     // Instantiate our module with the imports we've created, and run it.
-    let module = Module::from_file(&engine, "./example.wasm")?;
+    let module = Module::from_file(&engine, binary_name)?;
 
     let instance = linker.instantiate_async(&mut store, &module).await?;
 
