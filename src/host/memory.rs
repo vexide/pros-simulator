@@ -8,6 +8,7 @@ pub struct OutOfBoundsError;
 pub trait SharedMemoryExt {
     fn read_c_str(&self, ptr: u32) -> anyhow::Result<String>;
     fn write_relaxed(&self, offset: usize, buffer: &[u8]) -> Result<(), OutOfBoundsError>;
+    fn read_relaxed(&self, offset: usize, length: usize) -> Result<Vec<u8>, OutOfBoundsError>;
 }
 
 impl SharedMemoryExt for SharedMemory {
@@ -35,5 +36,15 @@ impl SharedMemoryExt for SharedMemory {
             unsafe { cell.get().write(*byte) };
         }
         Ok(())
+    }
+    fn read_relaxed(&self, offset: usize, length: usize) -> Result<Vec<u8>, OutOfBoundsError> {
+        let Some(data) = self.data().get(offset..offset + length) else {
+            return Err(OutOfBoundsError);
+        };
+        let mut buffer = Vec::with_capacity(length);
+        for cell in data.iter() {
+            buffer.push(unsafe { cell.get().read() });
+        }
+        Ok(buffer)
     }
 }

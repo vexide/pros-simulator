@@ -181,6 +181,7 @@ impl TaskPool {
             let id = task.id();
             let future = futures.entry(id).or_insert_with(|| Box::pin(task.start()));
             drop(host_inner);
+            drop(task);
 
             let result = futures::poll!(future);
             if result.is_ready() {
