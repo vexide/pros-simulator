@@ -1,7 +1,6 @@
 use std::{collections::HashMap, mem::size_of};
 
 use async_trait::async_trait;
-use tokio::runtime::Handle;
 use wasmtime::{AsContextMut, Caller, Memory, SharedMemory};
 
 use super::{memory::SharedMemoryExt, Host, WasmAllocator};
@@ -71,17 +70,17 @@ impl TaskStorage {
 
 #[async_trait]
 pub trait CallerExt {
-    fn task_storage(&mut self, task_handle: u32) -> TaskStorage;
+    async fn task_storage(&mut self, task_handle: u32) -> TaskStorage;
 }
 
 #[async_trait]
 impl<'a> CallerExt for Caller<'a, Host> {
-    fn task_storage(&mut self, task_handle: u32) -> TaskStorage {
-        let data = self.data_mut().blocking_lock();
+    async fn task_storage(&mut self, task_handle: u32) -> TaskStorage {
+        let data = self.data_mut().lock().await;
         let task = data.tasks.by_id(task_handle).expect("invalid task handle");
         drop(data);
 
-        let mut task = task.blocking_lock();
-        Handle::current().block_on(async move { task.local_storage(self).await })
+        let mut task = task.lock().await;
+        task.local_storage(self).await
     }
 }

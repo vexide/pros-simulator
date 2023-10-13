@@ -11,7 +11,7 @@ use std::{
     sync::Arc,
     time::Instant,
 };
-use tokio::{runtime::Handle, sync::Mutex, task::block_in_place};
+use tokio::sync::Mutex;
 use wasmtime::{AsContextMut, Caller, Engine, Instance, Memory, SharedMemory, TypedFunc};
 
 use self::{task::TaskPool, thread_local::TaskStorage};
@@ -98,7 +98,7 @@ impl InnerHost {
         }
     }
 }
-
+#[async_trait]
 pub trait ResultExt {
     /// If this result is an error, sets the simulator's [`errno`](Host::errno_address) to the Err value.
     /// Returns `true` if the result was Ok and `false` if it was Err.
@@ -109,21 +109,19 @@ pub trait ResultExt {
     /// let res = host.lcd.set_line(line, "");
     /// Ok(res.use_errno(&mut caller).await.into())
     /// ```
-    fn use_errno(self, caller: &mut Caller<'_, Host>) -> bool;
+    async fn use_errno(self, caller: &mut Caller<'_, Host>) -> bool;
 }
 
+#[async_trait]
 impl<T: Send> ResultExt for Result<T, i32> {
-    fn use_errno(self, caller: &mut Caller<'_, Host>) -> bool {
+    async fn use_errno(self, caller: &mut Caller<'_, Host>) -> bool {
         if let Err(code) = self {
-            let data = caller.data_mut().blocking_lock();
+            let data = caller.data_mut().lock().await;
             let current_task = data.tasks.current();
             let memory = data.memory.clone();
             drop(data);
-            let mut current_task = current_task.blocking_lock();
-            Handle::current().block_on(async move {
-                let errno = current_task.errno(caller).await;
-                errno.set(&memory, code);
-            });
+            let errno = current_task.lock().await.errno(caller).await;
+            errno.set(&memory, code);
         }
         self.is_ok()
     }
