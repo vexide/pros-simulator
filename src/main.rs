@@ -29,7 +29,8 @@ async fn main() -> Result<()> {
         Config::new()
             .async_support(true)
             .wasm_threads(true)
-            .debug_info(true),
+            .debug_info(true)
+            .wasm_backtrace_details(WasmBacktraceDetails::Enable),
     )
     .unwrap();
     let shared_memory = SharedMemory::new(&engine, MemoryType::shared(18, 16384))?;
