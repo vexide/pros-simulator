@@ -116,13 +116,13 @@ async fn main() -> Result<()> {
     linker.func_wrap3_async(
         "env",
         "vTaskSetThreadLocalStoragePointer",
-        |mut caller: Caller<'_, Host>, task_handle: u32, storage_index: i32, address: u32| {
+        |mut caller: Caller<'_, Host>, task_handle: u32, storage_index: i32, value: u32| {
             Box::new(async move {
                 let mut storage = caller.task_storage(task_handle).await;
                 let data = caller.data_mut().lock().await;
                 let memory = data.memory.clone();
                 drop(data);
-                storage.set(memory, storage_index, address)
+                storage.set(memory, storage_index, value)
             })
         },
     )?;
