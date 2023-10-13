@@ -196,7 +196,7 @@ dependencies = [
 [[package]]
 name = "pros"
 version = "0.0.10-rc.1"
-source = "git+https://github.com/pros-rs/pros-rs?branch=async_runtime#fa7a840d377acc7f3cc62f648f8156b3d7a4c6ce"
+source = "git+https://github.com/pros-rs/pros-rs?branch=async_runtime#b2fe5bd0a81106481498b8dacd93490a7e80511e"
 dependencies = [
  "async-trait",
  "futures",
@@ -212,7 +212,7 @@ dependencies = [
 [[package]]
 name = "pros-sys"
 version = "0.3.0"
-source = "git+https://github.com/pros-rs/pros-rs?branch=async_runtime#fa7a840d377acc7f3cc62f648f8156b3d7a4c6ce"
+source = "git+https://github.com/pros-rs/pros-rs?branch=async_runtime#b2fe5bd0a81106481498b8dacd93490a7e80511e"
 dependencies = [
  "cfg-if",
 ]
