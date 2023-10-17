@@ -168,11 +168,19 @@ pub async fn simulate(robot_code: &Path) -> Result<()> {
 
     let instance = linker.instantiate_async(&mut store, &module).await?;
 
-    // Like before, we can get the run function and execute it.
     let initialize = instance.get_typed_func::<(), ()>(&mut store, "initialize")?;
+    let opcontrol = instance.get_typed_func::<(), ()>(&mut store, "opcontrol")?;
+    let robot_code_runner = Func::wrap0_async(&mut store, move |mut caller: Caller<'_, Host>| {
+        Box::new(async move {
+            initialize.call_async(&mut caller, ()).await?;
+            opcontrol.call_async(&mut caller, ()).await?;
+            Ok(())
+        })
+    }).typed::<(), ()>(&mut store).unwrap();
+
     {
         let mut host = host.lock().await;
-        host.tasks.spawn(instance, store, initialize);
+        host.tasks.spawn(instance, store, robot_code_runner);
     }
     TaskPool::run_to_completion(&host).await;
 
