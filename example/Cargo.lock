@@ -21,9 +21,9 @@ checksum = "0942ffc6dcaadf03badf6e6a2d0228460359d5e34b57ccdc720b7382dfbd5ec5"
 
 [[package]]
 name = "async-trait"
-version = "0.1.73"
+version = "0.1.74"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc00ceb34980c03614e35a3a4e218276a0a824e911d07651cd0d858a51e8c0f0"
+checksum = "a66537f1bb974b254c98ed142ff995236e81b9d0fe4db0575f46612cb15eb0f9"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -196,7 +196,7 @@ dependencies = [
 [[package]]
 name = "pros"
 version = "0.0.10-rc.1"
-source = "git+https://github.com/pros-rs/pros-rs?branch=async_runtime#b2fe5bd0a81106481498b8dacd93490a7e80511e"
+source = "git+https://github.com/pros-rs/pros-rs?branch=async_runtime#39c0fa45492677b3a2bc6e7f1984e9a768e22f2b"
 dependencies = [
  "async-trait",
  "futures",
@@ -212,7 +212,7 @@ dependencies = [
 [[package]]
 name = "pros-sys"
 version = "0.3.0"
-source = "git+https://github.com/pros-rs/pros-rs?branch=async_runtime#b2fe5bd0a81106481498b8dacd93490a7e80511e"
+source = "git+https://github.com/pros-rs/pros-rs?branch=async_runtime#39c0fa45492677b3a2bc6e7f1984e9a768e22f2b"
 dependencies = [
  "cfg-if",
 ]

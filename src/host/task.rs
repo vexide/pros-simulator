@@ -10,6 +10,12 @@ use wasmtime::{AsContextMut, Engine, Instance, Linker, Module, SharedMemory, Sto
 
 use super::{memory::SharedMemoryExt, thread_local::TaskStorage, Host, WasmAllocator};
 
+pub enum TaskState {
+    Running,
+    Idle,
+    Finished,
+}
+
 pub struct Task {
     id: u32,
     local_storage: Option<TaskStorage>,
@@ -19,6 +25,7 @@ pub struct Task {
     instance: Instance,
     allocator: WasmAllocator,
     store: Arc<Mutex<Store<Host>>>,
+    is_finished: bool,
 }
 
 impl Task {
@@ -38,6 +45,7 @@ impl Task {
             instance,
             allocator,
             store: Arc::new(Mutex::new(store)),
+            is_finished: false,
         }))
     }
 
@@ -73,6 +81,10 @@ impl Task {
             let mut store = store.lock().await;
             task_impl.call_async(&mut *store, ()).await.unwrap();
         }
+    }
+
+    pub fn is_finished(&self) -> bool {
+        self.is_finished
     }
 }
 impl PartialEq for Task {
@@ -189,6 +201,21 @@ impl TaskPool {
                 let mut host = host.lock().await;
                 host.tasks.pool.remove(&id);
             }
+        }
+    }
+
+    pub async fn task_state(&self, task: Arc<Mutex<Task>>) -> Option<TaskState> {
+        if let Some(current_task) = &self.current_task {
+            if Arc::ptr_eq(current_task, &task) {
+                return Some(TaskState::Running);
+            }
+        }
+
+        let task = task.lock().await;
+        if task.is_finished() {
+            Some(TaskState::Finished)
+        } else {
+            Some(TaskState::Idle)
         }
     }
 }
