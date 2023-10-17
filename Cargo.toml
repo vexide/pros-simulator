@@ -5,6 +5,15 @@ edition = "2021"
 authors = ["doinkythederp <doinkythederp@icloud.com>", "pros-rs"]
 license = "MIT"
 repository = "https://github.com/pros-rs/pros-simulator"
+description = "Run PROS robot code without the need for real VEX V5 hardware."
+categories = [
+    "science::robotics",
+    "development-tools",
+    "emulators",
+    "simulation",
+    "wasm",
+    "os",
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
