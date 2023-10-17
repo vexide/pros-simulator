@@ -163,6 +163,14 @@ pub async fn simulate(robot_code: &Path) -> Result<()> {
         },
     )?;
 
+    linker.func_wrap1_async("env", "sim_abort", |caller: Caller<'_, Host>, msg: u32| {
+        Box::new(async move {
+            let data = caller.data().lock().await;
+            let abort_msg = data.memory.read_c_str(msg).unwrap();
+            panic!("{abort_msg}");
+        })
+    })?;
+
     // Instantiate our module with the imports we've created, and run it.
     let module = Module::from_file(&engine, robot_code)?;
 
