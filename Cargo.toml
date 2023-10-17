@@ -2,6 +2,9 @@
 name = "pros-simulator"
 version = "0.1.0"
 edition = "2021"
+authors = ["doinkythederp <doinkythederp@icloud.com>", "pros-rs"]
+license = "MIT"
+repository = "https://github.com/pros-rs/pros-simulator"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
