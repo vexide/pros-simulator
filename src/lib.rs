@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::Path;
+use std::process::exit;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -165,9 +166,12 @@ pub async fn simulate(robot_code: &Path) -> Result<()> {
 
     linker.func_wrap1_async("env", "sim_abort", |caller: Caller<'_, Host>, msg: u32| {
         Box::new(async move {
+            let backtrace = WasmBacktrace::force_capture(&caller);
             let data = caller.data().lock().await;
             let abort_msg = data.memory.read_c_str(msg).unwrap();
-            panic!("{abort_msg}");
+            println!("{abort_msg}");
+            println!("{backtrace}");
+            exit(1);
         })
     })?;
 
@@ -184,7 +188,9 @@ pub async fn simulate(robot_code: &Path) -> Result<()> {
             opcontrol.call_async(&mut caller, ()).await?;
             Ok(())
         })
-    }).typed::<(), ()>(&mut store).unwrap();
+    })
+    .typed::<(), ()>(&mut store)
+    .unwrap();
 
     {
         let mut host = host.lock().await;
