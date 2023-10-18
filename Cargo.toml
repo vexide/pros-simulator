@@ -22,4 +22,6 @@ async-trait = "0.1.73"
 futures = { version = "0.3.28", features = ["async-await"] }
 pros-sys = { version = "0.3", features = ["no-link"] }
 tokio = { version = "1.32.0", features = ["rt", "macros", "sync", "time"] }
-wasmtime = { version = "13.0.0", features = ["async"] }
+wasmtime = { git = "https://github.com/bytecodealliance/wasmtime.git", features = [
+    "async",
+] }

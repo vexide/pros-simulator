@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 #pros = { git = "https://github.com/pros-rs/pros-rs", branch = "async_runtime" }
 pros = { path = "../../pros-rs/pros" }
+pros-sys = { path = "../../pros-rs/pros-sys" }

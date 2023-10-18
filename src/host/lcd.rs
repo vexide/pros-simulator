@@ -15,6 +15,7 @@ impl Lcd {
 
     fn assert_initialized(&self) -> Result<(), i32> {
         if !self.initialized {
+            eprintln!("Already initialized");
             return Err(errno::ENXIO);
         }
         Ok(())
@@ -22,6 +23,7 @@ impl Lcd {
 
     fn assert_line_in_bounds(&self, line: i32) -> Result<(), i32> {
         if line < 0 || line >= Lcd::HEIGHT as i32 {
+            eprintln!("Line {line} not in bounds");
             return Err(errno::EINVAL);
         }
         Ok(())
@@ -29,6 +31,7 @@ impl Lcd {
 
     fn assert_text_length_in_bounds(&self, text: &str) -> Result<(), i32> {
         if text.len() > Lcd::WIDTH as usize {
+            eprintln!("Text too long for LCD");
             return Err(errno::EINVAL);
         }
         Ok(())
