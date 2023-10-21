@@ -53,7 +53,6 @@ name = "example"
 version = "0.1.0"
 dependencies = [
  "pros",
- "pros-sys",
 ]
 
 [[package]]
@@ -119,9 +118,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.14.1"
+version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dfda62a12f55daeae5015f81b0baea145391cb4520f86c248fc615d72640d12"
+checksum = "f93e7192158dbcda357bdec5fb5788eebf8bbac027f3f33e719d29135ae84156"
 dependencies = [
  "ahash",
  "allocator-api2",
@@ -144,9 +143,9 @@ dependencies = [
 
 [[package]]
 name = "lock_api"
-version = "0.4.10"
+version = "0.4.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1cc9717a20b1bb222f333e6a92fd32f7d8a18ddc5a3191a11af45dcbf4dcd16"
+checksum = "3c168f8615b12bc01f9c17e2eb0cc07dcae1940121185446edc3744920e8ef45"
 dependencies = [
  "autocfg",
  "scopeguard",
@@ -197,6 +196,7 @@ dependencies = [
 [[package]]
 name = "pros"
 version = "0.0.10-rc.1"
+source = "git+https://github.com/pros-rs/pros-rs?branch=async_runtime#ef4c69c24d0bb776ce74c2e379e082a6a7ed70a2"
 dependencies = [
  "async-trait",
  "cfg-if",
@@ -213,6 +213,7 @@ dependencies = [
 [[package]]
 name = "pros-sys"
 version = "0.3.0"
+source = "git+https://github.com/pros-rs/pros-rs?branch=async_runtime#ef4c69c24d0bb776ce74c2e379e082a6a7ed70a2"
 dependencies = [
  "cfg-if",
 ]
