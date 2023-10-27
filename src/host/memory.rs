@@ -1,6 +1,4 @@
-
-
-use wasmtime::{SharedMemory};
+use wasmtime::SharedMemory;
 
 #[derive(Debug)]
 pub struct OutOfBoundsError;

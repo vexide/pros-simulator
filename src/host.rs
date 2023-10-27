@@ -5,16 +5,11 @@ pub mod thread_local;
 
 use async_trait::async_trait;
 use lcd::Lcd;
-use std::{
-    alloc::Layout,
-    collections::{HashSet},
-    sync::Arc,
-    time::Instant,
-};
+use std::{alloc::Layout, collections::HashSet, sync::Arc, time::Instant};
 use tokio::sync::Mutex;
 use wasmtime::{AsContextMut, Caller, Engine, Instance, SharedMemory, TypedFunc};
 
-use self::{task::TaskPool};
+use self::task::TaskPool;
 
 /// This struct contains the functions necessary to send buffers to the sandbox.
 /// By letting the sandboxed allocator know that we want to write a buffer

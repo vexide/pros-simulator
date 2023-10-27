@@ -1,9 +1,4 @@
-use std::{
-    collections::HashMap,
-    future::Future,
-    pin::{Pin},
-    sync::Arc,
-};
+use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc};
 
 use tokio::sync::Mutex;
 use wasmtime::{AsContextMut, Engine, Instance, SharedMemory, Store, TypedFunc};
