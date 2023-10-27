@@ -1,16 +1,18 @@
 #![no_main]
 #![no_std]
 
-extern crate alloc;
-
-use pros::prelude::*;
+use pros::prelude::{println, *};
+use pros::task::delay;
+use core::time::Duration;
 
 pub struct SimRobot;
 impl Default for SimRobot {
     fn default() -> Self {
-        println!("Hello world!");
+        println!("Hello from simulator!");
+        delay(Duration::from_secs(1));
+        println!("Goodbye from simulator!");
         SimRobot
     }
 }
-impl Robot for SimRobot {}
-robot!(SimRobot);
+impl SyncRobot for SimRobot {}
+sync_robot!(SimRobot);
