@@ -1,7 +1,7 @@
-use std::{collections::HashMap, mem::size_of};
+use std::{mem::size_of};
 
 use async_trait::async_trait;
-use wasmtime::{AsContextMut, Caller, Memory, SharedMemory};
+use wasmtime::{AsContextMut, Caller, SharedMemory};
 
 use super::{memory::SharedMemoryExt, Host, WasmAllocator};
 

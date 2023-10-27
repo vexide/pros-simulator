@@ -1,12 +1,12 @@
 use std::{
     collections::HashMap,
     future::Future,
-    pin::{pin, Pin},
+    pin::{Pin},
     sync::Arc,
 };
 
 use tokio::sync::Mutex;
-use wasmtime::{AsContextMut, Engine, Instance, Linker, Module, SharedMemory, Store, TypedFunc};
+use wasmtime::{AsContextMut, Engine, Instance, SharedMemory, Store, TypedFunc};
 
 use super::{memory::SharedMemoryExt, thread_local::TaskStorage, Host, WasmAllocator};
 

@@ -1,6 +1,6 @@
-use std::sync::atomic::{AtomicU8, Ordering};
 
-use wasmtime::{MemoryAccessError, SharedMemory};
+
+use wasmtime::{SharedMemory};
 
 #[derive(Debug)]
 pub struct OutOfBoundsError;
