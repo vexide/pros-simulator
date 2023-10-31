@@ -1,17 +1,7 @@
 use futures::{future::pending, FutureExt};
 use slab::Slab;
 // use std::sync::Mutex;
-use std::{
-    collections::HashMap,
-    future::Future,
-    pin::{pin, Pin},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    task::{Context, Poll},
-    time::{Duration, Instant},
-};
+use std::{sync::Arc, time::Instant};
 use tokio::sync::{Mutex, OwnedMutexGuard};
 
 #[derive(Debug, Default)]

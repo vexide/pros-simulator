@@ -6,7 +6,7 @@ pub mod thread_local;
 
 use async_trait::async_trait;
 use lcd::Lcd;
-use std::{alloc::Layout, collections::HashSet, sync::Arc, time::Instant};
+use std::{alloc::Layout, sync::Arc, time::Instant};
 use tokio::sync::Mutex;
 use wasmtime::{AsContextMut, Caller, Engine, Instance, SharedMemory, TypedFunc};
 
