@@ -18,6 +18,9 @@
                     "name": "pros-simulator",
                     "kind": "bin"
                 },
+                "env": {
+                    "CARGO_TERM_COLOR": "always"
+                }
             },
             "args": [
                 "./example/target/wasm32-unknown-unknown/debug/example.wasm"
