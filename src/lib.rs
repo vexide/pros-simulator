@@ -19,6 +19,7 @@ use wasmtime::*;
 pub mod host;
 
 pub async fn simulate(robot_code: &Path) -> Result<()> {
+    tracing::debug!("Initializing WASM runtime");
     let engine = Engine::new(
         Config::new()
             .async_support(true)
@@ -209,11 +210,12 @@ pub async fn simulate(robot_code: &Path) -> Result<()> {
         })
     })?;
 
-    // Instantiate our module with the imports we've created, and run it.
+    tracing::info!("JIT compiling your Rust... 🚀");
     let module = Module::from_file(&engine, robot_code)?;
 
     let instance = linker.instantiate_async(&mut store, &module).await?;
 
+    tracing::info!("Starting the init/opcontrol task... 🏁");
     let initialize = instance.get_typed_func::<(), ()>(&mut store, "initialize")?;
     let opcontrol = instance.get_typed_func::<(), ()>(&mut store, "opcontrol")?;
     let robot_code_runner = Func::wrap0_async(&mut store, move |mut caller: Caller<'_, Host>| {
