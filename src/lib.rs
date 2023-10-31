@@ -22,6 +22,7 @@ pub async fn simulate(robot_code: &Path) -> Result<()> {
     let engine = Engine::new(
         Config::new()
             .async_support(true)
+            .wasm_threads(true)
             .debug_info(true)
             .wasm_backtrace_details(WasmBacktraceDetails::Enable),
     )
