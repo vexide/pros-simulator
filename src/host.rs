@@ -1,5 +1,6 @@
 pub mod lcd;
 pub mod memory;
+pub mod multitasking;
 pub mod task;
 pub mod thread_local;
 
@@ -9,7 +10,7 @@ use std::{alloc::Layout, collections::HashSet, sync::Arc, time::Instant};
 use tokio::sync::Mutex;
 use wasmtime::{AsContextMut, Caller, Engine, Instance, SharedMemory, TypedFunc};
 
-use self::task::TaskPool;
+use self::{multitasking::MutexPool, task::TaskPool};
 
 /// This struct contains the functions necessary to send buffers to the sandbox.
 /// By letting the sandboxed allocator know that we want to write a buffer
@@ -70,7 +71,7 @@ pub struct InnerHost {
     pub memory: SharedMemory,
     pub lcd: Lcd,
     /// Pointers to mutexes created with mutex_create
-    pub mutexes: HashSet<u32>,
+    pub mutexes: MutexPool,
     pub wasm_allocator: Option<WasmAllocator>,
     pub tasks: TaskPool,
     pub start_time: Instant,
@@ -86,7 +87,7 @@ impl InnerHost {
             op_control: None,
             memory,
             lcd: Lcd::default(),
-            mutexes: HashSet::default(),
+            mutexes: MutexPool::default(),
             wasm_allocator: None,
             tasks: TaskPool::new(engine),
             start_time: Instant::now(),

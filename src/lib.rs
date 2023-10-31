@@ -2,6 +2,7 @@ use std::path::Path;
 use std::process::exit;
 use std::sync::Arc;
 use std::time::Duration;
+use std::time::Instant;
 
 use anyhow::{anyhow, Result};
 use host::memory::SharedMemoryExt;
@@ -10,6 +11,7 @@ use host::thread_local::CallerExt;
 use host::Host;
 use host::InnerHost;
 use host::ResultExt;
+use pros_sys::TIMEOUT_MAX;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use wasmtime::*;
@@ -80,17 +82,52 @@ pub async fn simulate(robot_code: &Path) -> Result<()> {
         })
     })?;
 
-    // mutexes are currently a no-op because threads aren't implemented yet
-
-    linker.func_wrap("env", "mutex_create", || 0u32)?;
-
-    linker.func_wrap("env", "mutex_delete", |_mutex: u32| {})?;
-
-    linker.func_wrap("env", "mutex_give", |_mutex: u32| -> u32 { true.into() })?;
-
-    linker.func_wrap("env", "mutex_take", |_mutex: u32, _timeout: u32| -> u32 {
-        true.into()
+    linker.func_wrap0_async("env", "mutex_create", |mut caller: Caller<'_, Host>| {
+        Box::new(async move {
+            let mut host = caller.data_mut().lock().await;
+            let mutex_id = host.mutexes.create_mutex();
+            Ok(mutex_id as u32)
+        })
     })?;
+
+    linker.func_wrap1_async(
+        "env",
+        "mutex_delete",
+        |mut caller: Caller<'_, Host>, mutex_id: u32| {
+            Box::new(async move {
+                let mut host = caller.data_mut().lock().await;
+                host.mutexes.delete_mutex(mutex_id as usize);
+                Ok(())
+            })
+        },
+    )?;
+
+    linker.func_wrap1_async(
+        "env",
+        "mutex_give",
+        |mut caller: Caller<'_, Host>, mutex_id: u32| {
+            Box::new(async move {
+                let mut host = caller.data_mut().lock().await;
+                host.mutexes.unlock(mutex_id as usize);
+
+                Ok(u32::from(true))
+            })
+        },
+    )?;
+
+    linker.func_wrap2_async(
+        "env",
+        "mutex_take",
+        |mut caller: Caller<'_, Host>, mutex_id: u32, timeout: u32| {
+            Box::new(async move {
+                let mut host = caller.data_mut().lock().await;
+                let timeout = (timeout != TIMEOUT_MAX)
+                    .then(|| Instant::now() + Duration::from_millis(timeout.into()));
+                let success = host.mutexes.lock(mutex_id as usize, timeout).await;
+                Ok(u32::from(success))
+            })
+        },
+    )?;
 
     linker.func_wrap2_async(
         "env",

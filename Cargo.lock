@@ -743,6 +743,7 @@ dependencies = [
  "async-trait",
  "futures",
  "pros-sys",
+ "slab",
  "tokio",
  "wasmtime",
 ]
