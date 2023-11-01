@@ -10,6 +10,8 @@ use std::{alloc::Layout, sync::Arc, time::Instant};
 use tokio::sync::Mutex;
 use wasmtime::{AsContextMut, Caller, Engine, Instance, SharedMemory, TypedFunc};
 
+use crate::interface::HostInterface;
+
 use self::{multitasking::MutexPool, task::TaskPool};
 
 /// This struct contains the functions necessary to send buffers to the sandbox.
@@ -75,10 +77,13 @@ pub struct InnerHost {
     pub wasm_allocator: Option<WasmAllocator>,
     pub tasks: TaskPool,
     pub start_time: Instant,
+    pub interface: Arc<std::sync::Mutex<HostInterface>>,
 }
 
 impl InnerHost {
-    pub fn new(engine: Engine, memory: SharedMemory) -> Self {
+    pub fn new(engine: Engine, memory: SharedMemory, host_interface: HostInterface) -> Self {
+        use std::sync::Mutex;
+        let interface = Arc::new(Mutex::new(host_interface));
         Self {
             autonomous: None,
             initialize: None,
@@ -86,11 +91,12 @@ impl InnerHost {
             competition_initialize: None,
             op_control: None,
             memory,
-            lcd: Lcd::default(),
+            lcd: Lcd::new(interface.clone()),
             mutexes: MutexPool::default(),
             wasm_allocator: None,
             tasks: TaskPool::new(engine),
             start_time: Instant::now(),
+            interface,
         }
     }
 }

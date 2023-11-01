@@ -11,14 +11,16 @@ use host::thread_local::CallerExt;
 use host::Host;
 use host::InnerHost;
 use host::ResultExt;
+use interface::HostInterface;
 use pros_sys::TIMEOUT_MAX;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use wasmtime::*;
 
 pub mod host;
+pub mod interface;
 
-pub async fn simulate(robot_code: &Path) -> Result<()> {
+pub async fn simulate(robot_code: &Path, interface: HostInterface) -> Result<()> {
     tracing::debug!("Initializing WASM runtime");
     let engine = Engine::new(
         Config::new()
@@ -32,21 +34,26 @@ pub async fn simulate(robot_code: &Path) -> Result<()> {
     let host = Arc::new(Mutex::new(InnerHost::new(
         engine.clone(),
         shared_memory.clone(),
+        interface,
     )));
 
     let mut linker = Linker::<Host>::new(&engine);
     let mut store = Store::new(&engine, host.clone());
 
     linker.define(&mut store, "env", "memory", shared_memory)?;
-    linker.func_wrap0_async("env", "lcd_initialize", |mut caller: Caller<'_, Host>| {
-        Box::new(async move {
-            let mut host = caller.data_mut().lock().await;
-            let res = host.lcd.initialize();
-            drop(host);
+    linker.func_wrap0_async(
+        "env",
+        "lcd_initialize",
+        |mut caller: Caller<'_, Host>| {
+            Box::new(async move {
+                let mut host = caller.data_mut().lock().await;
+                let res = host.lcd.initialize();
+                drop(host);
 
-            Ok(u32::from(res.is_ok()))
-        })
-    })?;
+                Ok(u32::from(res.is_ok()))
+            })
+        },
+    )?;
 
     linker.func_wrap2_async(
         "env",
@@ -165,12 +172,16 @@ pub async fn simulate(robot_code: &Path) -> Result<()> {
         })
     })?;
 
-    linker.func_wrap1_async("env", "delay", |_caller: Caller<'_, Host>, millis: u32| {
-        Box::new(async move {
-            sleep(Duration::from_millis(millis.into())).await;
-            Ok(())
-        })
-    })?;
+    linker.func_wrap1_async(
+        "env",
+        "delay",
+        |_caller: Caller<'_, Host>, millis: u32| {
+            Box::new(async move {
+                sleep(Duration::from_millis(millis.into())).await;
+                Ok(())
+            })
+        },
+    )?;
 
     linker.func_wrap0_async("env", "__errno", |mut caller: Caller<'_, Host>| {
         Box::new(async move {
@@ -199,16 +210,20 @@ pub async fn simulate(robot_code: &Path) -> Result<()> {
         },
     )?;
 
-    linker.func_wrap1_async("env", "sim_abort", |caller: Caller<'_, Host>, msg: u32| {
-        Box::new(async move {
-            let backtrace = WasmBacktrace::force_capture(&caller);
-            let data = caller.data().lock().await;
-            let abort_msg = data.memory.read_c_str(msg).unwrap();
-            println!("{abort_msg}");
-            println!("{backtrace}");
-            exit(1);
-        })
-    })?;
+    linker.func_wrap1_async(
+        "env",
+        "sim_abort",
+        |caller: Caller<'_, Host>, msg: u32| {
+            Box::new(async move {
+                let backtrace = WasmBacktrace::force_capture(&caller);
+                let data = caller.data().lock().await;
+                let abort_msg = data.memory.read_c_str(msg).unwrap();
+                println!("{abort_msg}");
+                println!("{backtrace}");
+                exit(1);
+            })
+        },
+    )?;
 
     tracing::info!("JIT compiling your Rust... 🚀");
     let module = Module::from_file(&engine, robot_code)?;
@@ -218,15 +233,16 @@ pub async fn simulate(robot_code: &Path) -> Result<()> {
     tracing::info!("Starting the init/opcontrol task... 🏁");
     let initialize = instance.get_typed_func::<(), ()>(&mut store, "initialize")?;
     let opcontrol = instance.get_typed_func::<(), ()>(&mut store, "opcontrol")?;
-    let robot_code_runner = Func::wrap0_async(&mut store, move |mut caller: Caller<'_, Host>| {
-        Box::new(async move {
-            initialize.call_async(&mut caller, ()).await?;
-            opcontrol.call_async(&mut caller, ()).await?;
-            Ok(())
+    let robot_code_runner =
+        Func::wrap0_async(&mut store, move |mut caller: Caller<'_, Host>| {
+            Box::new(async move {
+                initialize.call_async(&mut caller, ()).await?;
+                opcontrol.call_async(&mut caller, ()).await?;
+                Ok(())
+            })
         })
-    })
-    .typed::<(), ()>(&mut store)
-    .unwrap();
+        .typed::<(), ()>(&mut store)
+        .unwrap();
 
     {
         let mut host = host.lock().await;
