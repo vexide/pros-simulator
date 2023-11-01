@@ -1,7 +1,7 @@
-use std::sync::{Arc, Mutex, MutexGuard};
 use pros_sys::error as errno;
+use std::sync::{Arc, Mutex, MutexGuard};
 
-use crate::interface::{HostInterface, LcdInterface};
+use crate::interface::HostInterface;
 
 pub type LcdLines = [String; HEIGHT as usize];
 
@@ -64,7 +64,10 @@ impl Lcd {
         }
         {
             let mut interface = self.interface();
-            let init_lcd = interface.init_lcd.as_mut().expect("Simulator interface does not implement the LCD");
+            let init_lcd = interface
+                .init_lcd
+                .as_mut()
+                .expect("Simulator interface does not implement the LCD");
             interface.lcd_interface = Some(init_lcd());
         }
         self.draw();

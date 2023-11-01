@@ -1,5 +1,4 @@
 use crate::host::lcd::LcdLines;
-use std::{fmt, sync::Mutex};
 
 #[allow(clippy::type_complexity)] // it's not that bad... right?
 #[derive(Default)]
@@ -9,7 +8,6 @@ pub struct HostInterface {
 }
 
 impl HostInterface {
-
     pub fn lcd(mut self, init_lcd: impl 'static + Send + Fn() -> LcdInterface) -> Self {
         self.init_lcd = Some(Box::new(init_lcd));
         self
