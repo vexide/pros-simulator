@@ -4,15 +4,15 @@ pub mod multitasking;
 pub mod task;
 pub mod thread_local;
 
+use std::{alloc::Layout, sync::Arc, time::Instant};
+
 use async_trait::async_trait;
 use lcd::Lcd;
-use std::{alloc::Layout, sync::Arc, time::Instant};
 use tokio::sync::Mutex;
 use wasmtime::{AsContextMut, Caller, Engine, Instance, SharedMemory, TypedFunc};
 
-use crate::interface::HostInterface;
-
 use self::{multitasking::MutexPool, task::TaskPool};
+use crate::interface::HostInterface;
 
 /// This struct contains the functions necessary to send buffers to the sandbox.
 /// By letting the sandboxed allocator know that we want to write a buffer

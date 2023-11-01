@@ -1,18 +1,22 @@
-use std::ffi::OsString;
-use std::path::Path;
+use std::{
+    ffi::OsString,
+    io::{stdout, Result},
+    path::Path,
+};
 
 use crossterm::{
     event::{self, KeyCode, KeyEventKind},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use pros_simulator::interface::LcdInterface;
-use pros_simulator::{interface::HostInterface, simulate};
+use pros_simulator::{
+    interface::{HostInterface, LcdInterface},
+    simulate,
+};
 use ratatui::{
     prelude::{CrosstermBackend, Stylize, Terminal},
     widgets::Paragraph,
 };
-use std::io::{stdout, Result};
 
 #[tokio::main]
 async fn main() -> Result<()> {

@@ -1,20 +1,17 @@
-use std::path::Path;
-use std::process::exit;
-use std::sync::Arc;
-use std::time::Duration;
-use std::time::Instant;
+use std::{
+    path::Path,
+    process::exit,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use anyhow::{anyhow, Result};
-use host::memory::SharedMemoryExt;
-use host::task::TaskPool;
-use host::thread_local::CallerExt;
-use host::Host;
-use host::InnerHost;
-use host::ResultExt;
+use host::{
+    memory::SharedMemoryExt, task::TaskPool, thread_local::CallerExt, Host, InnerHost, ResultExt,
+};
 use interface::HostInterface;
 use pros_sys::TIMEOUT_MAX;
-use tokio::sync::Mutex;
-use tokio::time::sleep;
+use tokio::{sync::Mutex, time::sleep};
 use wasmtime::*;
 
 pub mod host;

@@ -1,7 +1,8 @@
-use futures::{future::pending, FutureExt};
-use slab::Slab;
 // use std::sync::Mutex;
 use std::{sync::Arc, time::Instant};
+
+use futures::{future::pending, FutureExt};
+use slab::Slab;
 use tokio::sync::{Mutex, OwnedMutexGuard};
 
 #[derive(Debug, Default)]

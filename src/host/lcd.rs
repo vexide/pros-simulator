@@ -1,5 +1,6 @@
-use pros_sys::error as errno;
 use std::sync::{Arc, Mutex, MutexGuard};
+
+use pros_sys::error as errno;
 
 use crate::interface::HostInterface;
 
