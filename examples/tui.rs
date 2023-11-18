@@ -15,9 +15,13 @@ use pros_simulator::{
     host::lcd::LcdLines, interface::SimulatorEvent, simulate, stream::start_simulator,
 };
 use ratatui::{
+    layout::{Constraint, Direction, Layout},
     prelude::{CrosstermBackend, Stylize, Terminal},
-    widgets::Paragraph,
+    style::{Color, Style},
+    widgets::{Block, Borders, Paragraph},
 };
+use tracing_subscriber::{layer::SubscriberExt, Registry};
+use tui_logger::{TuiLoggerLevelOutput, TuiLoggerSmartWidget, TuiLoggerWidget};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -31,6 +35,10 @@ async fn main() -> anyhow::Result<()> {
     }));
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.clear()?;
+
+    let tui_log_layer = tui_logger::tracing_subscriber_layer();
+    let logger = Registry::default().with(tui_log_layer);
+    tracing::subscriber::set_global_default(logger)?;
 
     // tracing_subscriber::fmt()
     //     .with_env_filter(
@@ -52,15 +60,36 @@ async fn main() -> anyhow::Result<()> {
     loop {
         // draw to terminal
         terminal.draw(|frame| {
-            let area = frame.size();
+            let size = frame.size();
+            let mut constraints = vec![Constraint::Percentage(50), Constraint::Percentage(30)];
+            let layout = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints(constraints)
+                .split(size);
+
             if let Some(lcd_lines) = &lcd_lines {
                 frame.render_widget(
                     Paragraph::new(format!("Lcd Display:\n{}", lcd_lines.join("\n"))),
-                    area,
+                    layout[0],
                 );
             } else {
-                frame.render_widget(Paragraph::new("LCD not initialized").red(), area);
+                frame.render_widget(Paragraph::new("LCD not initialized").red(), layout[0]);
             }
+
+            let tui_w = TuiLoggerWidget::default()
+                .block(Block::default().title("Logs").borders(Borders::ALL))
+                .output_separator(' ')
+                .output_timestamp(Some("%H:%M:%S".to_string()))
+                .output_level(Some(TuiLoggerLevelOutput::Long))
+                .output_target(false)
+                .output_file(false)
+                .output_line(false)
+                .style_error(Style::default().fg(Color::Red))
+                .style_debug(Style::default().fg(Color::Green))
+                .style_warn(Style::default().fg(Color::Yellow))
+                .style_trace(Style::default().fg(Color::Magenta))
+                .style_info(Style::default().fg(Color::Cyan));
+            frame.render_widget(tui_w, layout[1]);
         })?;
 
         // handle simulator events

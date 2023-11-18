@@ -24,6 +24,9 @@ pros-sys = { version = "0.3", features = ["no-link"] }
 slab = "0.4.9"
 tokio = { version = "1.32.0", features = ["macros", "sync", "time"] }
 tracing = "0.1.40"
+tui-logger = { version = "0.10.0", features = [
+    "tracing-support",
+], default-features = false }
 wasmtime = { version = "14.0.2", features = ["async"] }
 
 [features]
