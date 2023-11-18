@@ -1,28 +1,43 @@
+use std::sync::{Arc, Mutex};
+
+use wasmtime::WasmBacktrace;
+
 use crate::host::lcd::LcdLines;
 
-#[allow(clippy::type_complexity)] // it's not that bad... right?
-#[derive(Default)]
-pub struct HostInterface {
-    pub init_lcd: Option<Box<dyn Send + FnMut() -> LcdInterface>>,
-    pub lcd_interface: Option<LcdInterface>,
+#[derive(Debug)]
+pub enum SimulatorEvent {
+    Warning(String),
+
+    RobotCodeLoading,
+    RobotCodeStarted,
+    RobotCodeFinished,
+    RobotCodeError(String, WasmBacktrace),
+
+    LcdInitialized,
+    LcdUpdated(LcdLines),
+    LcdColorsUpdated(u32, u32),
+    LcdShutdown,
 }
 
-impl HostInterface {
-    pub fn lcd(mut self, init_lcd: impl 'static + Send + Fn() -> LcdInterface) -> Self {
-        self.init_lcd = Some(Box::new(init_lcd));
-        self
+#[derive(Clone)]
+pub struct SimulatorInterface {
+    callback: Arc<Mutex<dyn FnMut(SimulatorEvent) + Send>>,
+}
+
+impl<T> From<T> for SimulatorInterface
+where
+    T: FnMut(SimulatorEvent) + Send + 'static,
+{
+    fn from(callback: T) -> Self {
+        Self {
+            callback: Arc::new(Mutex::new(callback)),
+        }
     }
 }
 
-#[allow(clippy::type_complexity)]
-pub struct LcdInterface {
-    pub draw: Box<dyn Send + FnMut(&LcdLines)>,
-}
-
-impl LcdInterface {
-    pub fn new(draw: impl 'static + Send + Fn(&LcdLines)) -> Self {
-        Self {
-            draw: Box::new(draw),
-        }
+impl SimulatorInterface {
+    pub(crate) fn send(&self, event: SimulatorEvent) {
+        let mut callback = self.callback.lock().unwrap();
+        callback(event);
     }
 }

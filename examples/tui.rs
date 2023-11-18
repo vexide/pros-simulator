@@ -2,6 +2,7 @@ use std::{
     ffi::OsString,
     io::{stdout, Result},
     path::Path,
+    sync::{Arc, Mutex},
 };
 
 use crossterm::{
@@ -9,10 +10,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use pros_simulator::{
-    interface::{HostInterface, LcdInterface},
-    simulate,
-};
+use pros_simulator::{host::lcd::LcdLines, interface::SimulatorEvent, simulate};
 use ratatui::{
     prelude::{CrosstermBackend, Stylize, Terminal},
     widgets::Paragraph,
@@ -38,16 +36,19 @@ async fn main() -> Result<()> {
     });
     let robot_code = Path::new(binary_name.as_os_str());
 
-    let frontend = HostInterface::default().lcd(|| {
-        // runs on lcd_initialize. can be used to store LCD state (maybe a gui window?)
-        println!("init lcd");
-        LcdInterface::new(|lines| {
-            // runs when the lcd changes, could be used to update your window
-            println!("draw lcd: {:?}", lines);
-        })
-    });
+    let lcd_lines = None;
 
-    simulate(robot_code, frontend).await.unwrap();
+    simulate(robot_code, |event| match event {
+        SimulatorEvent::LcdInitialized => {
+            lcd_lines = Some(Default::default());
+        }
+        SimulatorEvent::LcdUpdated(lines) => {
+            lcd_lines = Some(lines);
+        }
+        _ => {}
+    })
+    .await
+    .unwrap();
 
     loop {
         terminal.draw(|frame| {

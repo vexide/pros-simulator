@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use pros_sys::error as errno;
 
-use crate::interface::HostInterface;
+use crate::interface::{SimulatorEvent, SimulatorInterface};
 
 pub type LcdLines = [String; HEIGHT as usize];
 
@@ -12,31 +12,28 @@ pub struct AlreadyInitializedError;
 const HEIGHT: u32 = 8;
 const WIDTH: u32 = 50;
 
+pub struct LcdColors {
+    pub background: u32,
+    pub foreground: u32,
+}
+
 pub struct Lcd {
     lines: LcdLines,
-    interface: Arc<Mutex<HostInterface>>,
+    interface: SimulatorInterface,
+    initialized: bool,
 }
 
 impl Lcd {
-    pub fn new(interface: Arc<Mutex<HostInterface>>) -> Self {
+    pub fn new(interface: SimulatorInterface) -> Self {
         Self {
             lines: Default::default(),
             interface,
+            initialized: false,
         }
     }
 
-    #[inline]
-    fn interface(&self) -> MutexGuard<'_, HostInterface> {
-        self.interface.lock().unwrap()
-    }
-
-    #[inline]
-    pub fn is_initialized(&self) -> bool {
-        self.interface().lcd_interface.is_some()
-    }
-
     fn assert_initialized(&self) -> Result<(), i32> {
-        if !self.is_initialized() {
+        if !self.initialized {
             tracing::error!("Not initialized");
             return Err(errno::ENXIO);
         }
@@ -60,18 +57,11 @@ impl Lcd {
     }
 
     pub fn initialize(&mut self) -> Result<(), AlreadyInitializedError> {
-        if self.is_initialized() {
+        if self.initialized {
             return Err(AlreadyInitializedError);
         }
-        {
-            let mut interface = self.interface();
-            let init_lcd = interface
-                .init_lcd
-                .as_mut()
-                .expect("Simulator interface does not implement the LCD");
-            interface.lcd_interface = Some(init_lcd());
-        }
-        self.draw();
+        self.initialized = true;
+        self.interface.send(SimulatorEvent::LcdInitialized);
         Ok(())
     }
 
@@ -81,22 +71,18 @@ impl Lcd {
         self.assert_text_length_in_bounds(text)?;
 
         self.lines[line as usize] = text.to_string();
-        self.draw();
+        self.interface
+            .send(SimulatorEvent::LcdUpdated(self.lines.clone()));
         Ok(())
-    }
-
-    pub fn draw(&self) {
-        let mut interface = self.interface();
-        let draw = &mut interface.lcd_interface.as_mut().unwrap().draw;
-        draw(&self.lines);
     }
 
     pub fn clear(&mut self) -> Result<(), i32> {
         self.assert_initialized()?;
-        for line in 0..HEIGHT {
-            self.lines[line as usize] = String::new();
+        for line in &mut self.lines {
+            line.clear();
         }
-        self.draw();
+        self.interface
+            .send(SimulatorEvent::LcdUpdated(self.lines.clone()));
         Ok(())
     }
 
@@ -105,7 +91,8 @@ impl Lcd {
         self.assert_line_in_bounds(line)?;
 
         self.lines[line as usize] = String::new();
-        self.draw();
+        self.interface
+            .send(SimulatorEvent::LcdUpdated(self.lines.clone()));
         Ok(())
     }
 }

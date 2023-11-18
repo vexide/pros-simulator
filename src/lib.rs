@@ -9,7 +9,7 @@ use anyhow::{anyhow, Result};
 use host::{
     memory::SharedMemoryExt, task::TaskPool, thread_local::CallerExt, Host, InnerHost, ResultExt,
 };
-use interface::HostInterface;
+use interface::SimulatorInterface;
 use pros_sys::TIMEOUT_MAX;
 use tokio::{sync::Mutex, time::sleep};
 use wasmtime::*;
@@ -17,7 +17,7 @@ use wasmtime::*;
 pub mod host;
 pub mod interface;
 
-pub async fn simulate(robot_code: &Path, interface: HostInterface) -> Result<()> {
+pub async fn simulate(robot_code: &Path, interface: impl Into<SimulatorInterface>) -> Result<()> {
     tracing::debug!("Initializing WASM runtime");
     let engine = Engine::new(
         Config::new()
@@ -31,7 +31,7 @@ pub async fn simulate(robot_code: &Path, interface: HostInterface) -> Result<()>
     let host = Arc::new(Mutex::new(InnerHost::new(
         engine.clone(),
         shared_memory.clone(),
-        interface,
+        interface.into(),
     )));
 
     let mut linker = Linker::<Host>::new(&engine);
