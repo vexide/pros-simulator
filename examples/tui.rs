@@ -18,6 +18,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
     Frame,
 };
+use tokio::sync::oneshot;
 use tracing_subscriber::{layer::SubscriberExt, Registry};
 use tui_big_text::BigTextBuilder;
 use tui_logger::{TuiLoggerLevelOutput, TuiLoggerWidget};
@@ -57,8 +58,9 @@ async fn app() -> anyhow::Result<()> {
     let robot_code = PathBuf::from(binary_name);
 
     let mut lcd_lines = None::<LcdLines>;
-    let mut sim_events = start_simulator(robot_code);
+    let mut sim_events = start_simulator(robot_code, true);
     let mut loading_state = Some(0);
+    let mut unpause = None::<oneshot::Sender<()>>;
 
     loop {
         // draw to terminal
@@ -128,11 +130,17 @@ async fn app() -> anyhow::Result<()> {
             frame.render_widget(tui_w, layout[1]);
         })?;
 
+        if let Some(unpause) = unpause.take() {
+            // After we receve an event, we only resume the simulator after we've redrawn the screen.
+            // This prevents the simulator from hitting a breakpoint before the screen is updated.
+            unpause.send(()).unwrap();
+        }
+
         // handle simulator events
         if let Poll::Ready(event) = futures::poll!(sim_events.try_next()) {
             let event = event?;
             if let Some(event) = event {
-                match event {
+                match event.inner {
                     SimulatorEvent::LcdUpdated(lines) => {
                         lcd_lines = Some(lines);
                     }
@@ -145,6 +153,7 @@ async fn app() -> anyhow::Result<()> {
                     }
                     _ => {}
                 }
+                unpause = event.unpause;
             }
         }
 
