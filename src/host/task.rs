@@ -175,7 +175,7 @@ impl TaskPool {
     }
 
     pub async fn run_to_completion(host: &Host) {
-        let mut futures = HashMap::<u32, Pin<Box<dyn Future<Output = ()>>>>::new();
+        let mut futures = HashMap::<u32, Pin<Box<dyn Future<Output = ()> + Send>>>::new();
         loop {
             let mut host_inner = host.lock().await;
             let running = host_inner.tasks.cycle_tasks().await;

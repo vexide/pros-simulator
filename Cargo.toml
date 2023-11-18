@@ -26,6 +26,10 @@ tokio = { version = "1.32.0", features = ["macros", "sync", "time"] }
 tracing = "0.1.40"
 wasmtime = { version = "14.0.2", features = ["async"] }
 
+[features]
+default = ["tokio-rt"]
+tokio-rt = ["tokio/rt"]
+
 [dev-dependencies]
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 tokio = { version = "1.32.0", features = [

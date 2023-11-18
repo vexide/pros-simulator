@@ -1,22 +1,40 @@
 use std::{
-    path::Path,
+    path::{Path, PathBuf},
+    pin::Pin,
     process::exit,
-    sync::Arc,
+    sync::{Arc, Mutex as SyncMutex},
+    task::{Context, Poll},
     time::{Duration, Instant},
 };
 
 use anyhow::{anyhow, Result};
+use futures::{Future, FutureExt, Stream, TryStream};
 use host::{
     memory::SharedMemoryExt, task::TaskPool, thread_local::CallerExt, Host, InnerHost, ResultExt,
 };
-use interface::SimulatorInterface;
+use interface::{SimulatorEvent, SimulatorInterface};
 use pros_sys::TIMEOUT_MAX;
-use tokio::{sync::Mutex, time::sleep};
+use tokio::{
+    sync::{
+        mpsc::{self, UnboundedReceiver},
+        Mutex,
+    },
+    time::sleep,
+};
 use wasmtime::*;
 
 pub mod host;
 pub mod interface;
+#[cfg(feature = "tokio-rt")]
+pub mod stream;
 
+/// Simulate the WebAssembly robot program at the given path.
+///
+/// # Arguments
+///
+/// - `robot_code`: The path to the robot program to simulate.
+/// - `interface`: A callback function that will be invoked with any events that occur during
+///   simulation.
 pub async fn simulate(robot_code: &Path, interface: impl Into<SimulatorInterface>) -> Result<()> {
     tracing::debug!("Initializing WASM runtime");
     let engine = Engine::new(
