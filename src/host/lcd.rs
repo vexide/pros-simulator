@@ -4,13 +4,13 @@ use pros_sys::error as errno;
 
 use crate::interface::{SimulatorEvent, SimulatorInterface};
 
-pub type LcdLines = [String; HEIGHT as usize];
+pub type LcdLines = [String; LCD_HEIGHT as usize];
 
 #[derive(Debug)]
 pub struct AlreadyInitializedError;
 
-const HEIGHT: u32 = 8;
-const WIDTH: u32 = 50;
+pub const LCD_HEIGHT: u32 = 8;
+pub const LCD_WIDTH: u32 = 50;
 
 pub struct LcdColors {
     pub background: u32,
@@ -41,7 +41,7 @@ impl Lcd {
     }
 
     fn assert_line_in_bounds(&self, line: i32) -> Result<(), i32> {
-        if line < 0 || line >= HEIGHT as i32 {
+        if line < 0 || line >= LCD_HEIGHT as i32 {
             tracing::error!("Line {line} not in bounds");
             return Err(errno::EINVAL);
         }
@@ -49,7 +49,7 @@ impl Lcd {
     }
 
     fn assert_text_length_in_bounds(&self, text: &str) -> Result<(), i32> {
-        if text.len() > WIDTH as usize {
+        if text.len() > LCD_WIDTH as usize {
             tracing::error!("Text too long for LCD");
             return Err(errno::EINVAL);
         }

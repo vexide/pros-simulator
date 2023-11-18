@@ -1,9 +1,12 @@
 #![no_main]
 #![no_std]
 
-use pros::prelude::{println, *};
-use pros::task::delay;
 use core::time::Duration;
+
+use pros::{
+    prelude::{println, *},
+    task::delay,
+};
 
 pub struct SimRobot;
 impl Default for SimRobot {

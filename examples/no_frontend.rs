@@ -1,14 +1,7 @@
-use std::{
-    ffi::OsString,
-    path::{Path, PathBuf},
-};
+use std::{ffi::OsString, path::PathBuf};
 
 use futures::TryStreamExt;
-use pros_simulator::{
-    interface::{SimulatorEvent, SimulatorInterface},
-    simulate,
-    stream::start_simulator,
-};
+use pros_simulator::{interface::SimulatorEvent, stream::start_simulator};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

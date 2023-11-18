@@ -1,30 +1,33 @@
-use std::{
-    ffi::OsString,
-    io::stdout,
-    path::{Path, PathBuf},
-    sync::{Arc, Mutex},
-};
+use std::{ffi::OsString, io::stdout, path::PathBuf, task::Poll};
 
 use crossterm::{
     event::{self, KeyCode, KeyEventKind},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
 };
-use futures::{TryStream, TryStreamExt};
+use futures::TryStreamExt;
 use pros_simulator::{
-    host::lcd::LcdLines, interface::SimulatorEvent, simulate, stream::start_simulator,
+    host::lcd::{LcdLines, LCD_HEIGHT, LCD_WIDTH},
+    interface::SimulatorEvent,
+    stream::start_simulator,
 };
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     prelude::{CrosstermBackend, Stylize, Terminal},
     style::{Color, Style},
     widgets::{Block, Borders, Paragraph},
+    Frame,
 };
 use tracing_subscriber::{layer::SubscriberExt, Registry};
-use tui_logger::{TuiLoggerLevelOutput, TuiLoggerSmartWidget, TuiLoggerWidget};
+use tui_big_text::BigTextBuilder;
+use tui_logger::{TuiLoggerLevelOutput, TuiLoggerWidget};
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() {
+    // trigger panic hook on error
+    app().await.unwrap();
+}
+async fn app() -> anyhow::Result<()> {
     stdout().execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
     let panic_hook = std::panic::take_hook();
@@ -54,26 +57,59 @@ async fn main() -> anyhow::Result<()> {
     let robot_code = PathBuf::from(binary_name);
 
     let mut lcd_lines = None::<LcdLines>;
-
     let mut sim_events = start_simulator(robot_code);
+    let mut loading_state = Some(0);
 
     loop {
         // draw to terminal
         terminal.draw(|frame| {
             let size = frame.size();
-            let mut constraints = vec![Constraint::Percentage(50), Constraint::Percentage(30)];
+            let constraints = vec![Constraint::Percentage(50), Constraint::Percentage(30)];
             let layout = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints(constraints)
                 .split(size);
 
-            if let Some(lcd_lines) = &lcd_lines {
+            let mut lcd_block = Block::new().title("LCD Display").borders(Borders::ALL);
+            lcd_block = lcd_block.border_style(Style::new().reset());
+            if let Some(loading_state) = &mut loading_state {
+                lcd_block = lcd_block.white().on_blue();
+                frame.render_widget(lcd_block.clone(), layout[0]);
+                draw_splash_screen(frame, lcd_block.inner(layout[0]), *loading_state).unwrap();
+                *loading_state += 1;
+            } else if let Some(lcd_lines) = &lcd_lines {
+                lcd_block = lcd_block.on_green();
+                let inner_size = lcd_block.inner(layout[0]);
+                let inner_block = Block::new().black().on_gray();
+
+                let vertical_padding = (inner_size.height - LCD_HEIGHT as u16) / 2;
+                let inner_vertical_layout = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints(vec![
+                        Constraint::Length(vertical_padding),
+                        Constraint::Length(LCD_HEIGHT as u16),
+                        Constraint::Length(vertical_padding),
+                    ])
+                    .split(inner_size);
+                let horizontal_padding = (inner_size.width - LCD_WIDTH as u16) / 2;
+                let inner_horizontal_layout = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints(vec![
+                        Constraint::Length(horizontal_padding),
+                        Constraint::Length(LCD_WIDTH as u16),
+                        Constraint::Length(horizontal_padding),
+                    ])
+                    .split(inner_vertical_layout[1]);
+
+                frame.render_widget(lcd_block, layout[0]);
                 frame.render_widget(
-                    Paragraph::new(format!("Lcd Display:\n{}", lcd_lines.join("\n"))),
-                    layout[0],
+                    Paragraph::new(lcd_lines.join("\n")).block(inner_block),
+                    inner_horizontal_layout[1],
                 );
             } else {
-                frame.render_widget(Paragraph::new("LCD not initialized").red(), layout[0]);
+                // black screen to emulate display off
+                lcd_block = lcd_block.on_black();
+                frame.render_widget(lcd_block, layout[0]);
             }
 
             let tui_w = TuiLoggerWidget::default()
@@ -93,13 +129,22 @@ async fn main() -> anyhow::Result<()> {
         })?;
 
         // handle simulator events
-        if let Some(event) = sim_events.try_next().await? {
-            match event {
-                SimulatorEvent::LcdUpdated(lines) => {
-                    lcd_lines = Some(lines);
+        if let Poll::Ready(event) = futures::poll!(sim_events.try_next()) {
+            let event = event?;
+            if let Some(event) = event {
+                match event {
+                    SimulatorEvent::LcdUpdated(lines) => {
+                        lcd_lines = Some(lines);
+                    }
+                    SimulatorEvent::LcdInitialized => lcd_lines = Some(LcdLines::default()),
+                    SimulatorEvent::RobotCodeStarting => {
+                        loading_state = None;
+                    }
+                    SimulatorEvent::RobotCodeFinished => {
+                        tracing::info!("Press q to quit.");
+                    }
+                    _ => {}
                 }
-                SimulatorEvent::LcdInitialized => lcd_lines = Some(LcdLines::default()),
-                _ => {}
             }
         }
 
@@ -115,5 +160,39 @@ async fn main() -> anyhow::Result<()> {
 
     stdout().execute(LeaveAlternateScreen)?;
     disable_raw_mode()?;
+    Ok(())
+}
+
+fn draw_splash_screen(frame: &mut Frame, size: Rect, loading_state: usize) -> anyhow::Result<()> {
+    let constraints = vec![Constraint::Min(8), Constraint::Min(1)];
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(constraints)
+        .split(size);
+    {
+        let size = layout[0];
+        const MESSAGE: &str = "pros-rs";
+        let width = (MESSAGE.len() * 8) as u16;
+        let centered_layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length((size.width - width) / 2),
+                Constraint::Length(width),
+                Constraint::Length((size.width - width) / 2),
+            ])
+            .split(size);
+        let splash_screen = BigTextBuilder::default()
+            .lines(vec![MESSAGE.into()])
+            .build()?;
+        frame.render_widget(splash_screen, centered_layout[1]);
+    }
+    let loading_width = layout[1].width as usize;
+    let mut loading_text = " ".repeat(loading_width);
+    for i in loading_state..loading_state + 3 {
+        let i = i % loading_width;
+        loading_text.replace_range(i..i + 1, "#");
+    }
+    frame.render_widget(Paragraph::new(loading_text), layout[1]);
+
     Ok(())
 }

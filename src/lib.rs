@@ -1,26 +1,17 @@
 use std::{
-    path::{Path, PathBuf},
-    pin::Pin,
+    path::Path,
     process::exit,
-    sync::{Arc, Mutex as SyncMutex},
-    task::{Context, Poll},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
 use anyhow::{anyhow, Result};
-use futures::{Future, FutureExt, Stream, TryStream};
 use host::{
     memory::SharedMemoryExt, task::TaskPool, thread_local::CallerExt, Host, InnerHost, ResultExt,
 };
 use interface::{SimulatorEvent, SimulatorInterface};
 use pros_sys::TIMEOUT_MAX;
-use tokio::{
-    sync::{
-        mpsc::{self, UnboundedReceiver},
-        Mutex,
-    },
-    time::sleep,
-};
+use tokio::{sync::Mutex, time::sleep};
 use wasmtime::*;
 
 pub mod host;
@@ -36,7 +27,8 @@ pub mod stream;
 /// - `interface`: A callback function that will be invoked with any events that occur during
 ///   simulation.
 pub async fn simulate(robot_code: &Path, interface: impl Into<SimulatorInterface>) -> Result<()> {
-    tracing::debug!("Initializing WASM runtime");
+    let interface: SimulatorInterface = interface.into();
+    tracing::info!("Initializing WASM runtime");
     let engine = Engine::new(
         Config::new()
             .async_support(true)
@@ -49,7 +41,7 @@ pub async fn simulate(robot_code: &Path, interface: impl Into<SimulatorInterface
     let host = Arc::new(Mutex::new(InnerHost::new(
         engine.clone(),
         shared_memory.clone(),
-        interface.into(),
+        interface.clone(),
     )));
 
     let mut linker = Linker::<Host>::new(&engine);
@@ -229,10 +221,12 @@ pub async fn simulate(robot_code: &Path, interface: impl Into<SimulatorInterface
     })?;
 
     tracing::info!("JIT compiling your Rust... 🚀");
+    interface.send(SimulatorEvent::RobotCodeLoading);
     let module = Module::from_file(&engine, robot_code)?;
 
     let instance = linker.instantiate_async(&mut store, &module).await?;
 
+    interface.send(SimulatorEvent::RobotCodeStarting);
     tracing::info!("Starting the init/opcontrol task... 🏁");
     let initialize = instance.get_typed_func::<(), ()>(&mut store, "initialize")?;
     let opcontrol = instance.get_typed_func::<(), ()>(&mut store, "opcontrol")?;
@@ -251,6 +245,8 @@ pub async fn simulate(robot_code: &Path, interface: impl Into<SimulatorInterface
         host.tasks.spawn(instance, store, robot_code_runner);
     }
     TaskPool::run_to_completion(&host).await;
+    tracing::info!("All tasks are finished. ✅");
+    interface.send(SimulatorEvent::RobotCodeFinished);
 
     Ok(())
 }

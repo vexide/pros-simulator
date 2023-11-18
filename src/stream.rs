@@ -1,5 +1,4 @@
 use std::{
-    future::Future,
     path::PathBuf,
     pin::Pin,
     sync::{Arc, Mutex},
@@ -7,7 +6,7 @@ use std::{
 };
 
 use anyhow::Result;
-use futures::{FutureExt, Stream};
+use futures::{executor::block_on, FutureExt, Stream};
 use tokio::{
     sync::mpsc::{self, UnboundedReceiver},
     task::JoinHandle,
@@ -22,15 +21,14 @@ pub fn start_simulator(robot_code: PathBuf) -> impl Stream<Item = Result<Simulat
     SimulatorStream {
         finished: false,
         rx,
-        future: tokio::task::spawn(async move {
+        future: tokio::task::spawn_blocking(move || {
             let tx = Arc::new(Mutex::new(tx));
-            let res = simulate(&robot_code, {
+            let res = block_on(simulate(&robot_code, {
                 let tx = tx.clone();
                 move |event| {
                     tx.lock().unwrap().send(Ok(event)).unwrap();
                 }
-            })
-            .await;
+            }));
             if let Err(e) = res {
                 tx.lock().unwrap().send(Err(e)).unwrap();
             }

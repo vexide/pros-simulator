@@ -9,7 +9,7 @@ pub enum SimulatorEvent {
     Warning(String),
 
     RobotCodeLoading,
-    RobotCodeStarted,
+    RobotCodeStarting,
     RobotCodeFinished,
     RobotCodeError(String, WasmBacktrace),
 

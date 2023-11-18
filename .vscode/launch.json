@@ -7,6 +7,26 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "Debug TUI",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=tui"
+                ],
+                "filter": {
+                    "kind": "example",
+                    "name": "tui"
+                },
+                "env": {
+                    "CARGO_TERM_COLOR": "always"
+                }
+            },
+            "args": [],
+            "preLaunchTask": "rust: cargo build",
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
             "name": "Debug executable 'pros-simulator'",
             "cargo": {
                 "args": [
