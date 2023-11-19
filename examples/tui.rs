@@ -77,7 +77,6 @@ async fn app() -> anyhow::Result<()> {
     let logger = Registry::default().with(tui_log_layer);
     tracing::subscriber::set_global_default(logger)?;
 
-    let args = std::env::args_os().collect::<Vec<_>>();
     let binary_name = input_file.unwrap_or_else(|| {
         OsString::from("./example/target/wasm32-unknown-unknown/debug/example.wasm")
     });

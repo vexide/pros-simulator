@@ -4,19 +4,15 @@ pub mod multitasking;
 pub mod task;
 pub mod thread_local;
 
-use std::{
-    alloc::Layout,
-    sync::{Arc, Mutex as SyncMutex},
-    time::Instant,
-};
+use std::{alloc::Layout, sync::Arc, time::Instant};
 
 use async_trait::async_trait;
 use lcd::Lcd;
 use tokio::sync::Mutex;
-use wasmtime::{AsContextMut, Caller, Engine, Instance, SharedMemory, TypedFunc};
+use wasmtime::{AsContextMut, Caller, Instance, SharedMemory, TypedFunc};
 
 use self::{multitasking::MutexPool, task::TaskPool};
-use crate::interface::{SimulatorEvent, SimulatorInterface};
+use crate::interface::SimulatorInterface;
 
 /// This struct contains the functions necessary to send buffers to the sandbox.
 /// By letting the sandboxed allocator know that we want to write a buffer
@@ -85,7 +81,7 @@ pub struct InnerHost {
 }
 
 impl InnerHost {
-    pub fn new(engine: Engine, memory: SharedMemory, interface: SimulatorInterface) -> Self {
+    pub fn new(memory: SharedMemory, interface: SimulatorInterface) -> Self {
         Self {
             autonomous: None,
             initialize: None,
@@ -96,7 +92,7 @@ impl InnerHost {
             lcd: Lcd::new(interface.clone()),
             mutexes: MutexPool::default(),
             wasm_allocator: None,
-            tasks: TaskPool::new(engine),
+            tasks: TaskPool::new(),
             start_time: Instant::now(),
             interface,
         }

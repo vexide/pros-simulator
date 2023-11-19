@@ -39,7 +39,6 @@ pub async fn simulate(robot_code: &Path, interface: impl Into<SimulatorInterface
     .unwrap();
     let shared_memory = SharedMemory::new(&engine, MemoryType::shared(18, 16384))?;
     let host = Arc::new(Mutex::new(InnerHost::new(
-        engine.clone(),
         shared_memory.clone(),
         interface.clone(),
     )));

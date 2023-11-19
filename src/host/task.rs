@@ -1,7 +1,7 @@
 use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc};
 
 use tokio::sync::Mutex;
-use wasmtime::{AsContextMut, Engine, Instance, SharedMemory, Store, TypedFunc};
+use wasmtime::{AsContextMut, Instance, SharedMemory, Store, TypedFunc};
 
 use super::{memory::SharedMemoryExt, thread_local::TaskStorage, Host, WasmAllocator};
 
@@ -17,7 +17,7 @@ pub struct Task {
     task_impl: TypedFunc<(), ()>,
     priority: u32,
     errno: Option<Errno>,
-    instance: Instance,
+    // instance: Instance,
     allocator: WasmAllocator,
     store: Arc<Mutex<Store<Host>>>,
     is_finished: bool,
@@ -37,7 +37,6 @@ impl Task {
             task_impl,
             priority: 0,
             errno: None,
-            instance,
             allocator,
             store: Arc::new(Mutex::new(store)),
             is_finished: false,
@@ -71,7 +70,7 @@ impl Task {
 
     pub fn start(&mut self) -> impl Future<Output = ()> {
         let store = self.store.clone();
-        let task_impl = self.task_impl.clone();
+        let task_impl = self.task_impl;
         async move {
             let mut store = store.lock().await;
             task_impl.call_async(&mut *store, ()).await.unwrap();
@@ -91,21 +90,17 @@ impl Eq for Task {}
 
 pub type TaskHandle = Arc<Mutex<Task>>;
 
+#[derive(Default)]
 pub struct TaskPool {
     pool: HashMap<u32, TaskHandle>,
     newest_task_id: u32,
     current_task: Option<TaskHandle>,
-    engine: Engine,
+    // engine: Engine,
 }
 
 impl TaskPool {
-    pub fn new(engine: Engine) -> Self {
-        Self {
-            pool: HashMap::new(),
-            newest_task_id: 0,
-            current_task: None,
-            engine,
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn spawn(

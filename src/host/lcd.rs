@@ -1,5 +1,3 @@
-use std::sync::{Arc, Mutex, MutexGuard};
-
 use pros_sys::error as errno;
 
 use crate::interface::{SimulatorEvent, SimulatorInterface};
