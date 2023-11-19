@@ -20,4 +20,20 @@ This runtime implements a portion of the [PROS](https://pros.cs.purdue.edu/) C i
 
 ## Usage
 
-PROS Simulator is available in library form, but can also be used from [cargo-pros](https://github.com/pros-rs/cargo-pros) for a more user-friendly experience that works out of the box. This project contains the core of the simulator, which handles loading and running user-generated robot code, and requires a custom interface to be useful.
+PROS Simulator is available in library form, but can also be used from [cargo-pros](https://github.com/pros-rs/cargo-pros) for a more user-friendly experience that works out of the box. This project contains the core of the simulator, which handles loading and running user-generated robot code, and requires a custom interface to be useful. There are also a few example interfaces, like the TUI-based one.
+
+### TUI Interface
+
+To build the example simulator program, you'll need a nightly Rust toolchain and the was32-unknown-unknown target installed. In the `example` directory, run the following command to build:
+
+```terminal
+cargo +nightly build --target wasm32-unknown-unknown
+```
+
+Then, in the project root, run the following command to start the TUI:
+
+```terminal
+cargo run --example tui ./example/target/wasm32-unknown-unknown/debug/example.wasm
+```
+
+The simulator (and TUI interface) support the use of breakpoints in robot code! Try opening this project in VS Code and pressing F5 to start debugging the example program.
