@@ -3,19 +3,19 @@
 
 use core::time::Duration;
 
-use pros::{
-    prelude::{println, *},
-    task::delay,
-};
+use pros::{prelude::*, task::delay};
 
+#[derive(Default)]
 pub struct SimRobot;
-impl Default for SimRobot {
-    fn default() -> Self {
+
+impl SyncRobot for SimRobot {
+    fn opcontrol(&mut self) -> pros::Result {
+        delay(Duration::from_secs(2));
         println!("Hello from simulator!");
-        delay(Duration::from_secs(1));
+        delay(Duration::from_secs(3));
         println!("Goodbye from simulator!");
-        SimRobot
+        delay(Duration::from_secs(1));
+        Ok(())
     }
 }
-impl SyncRobot for SimRobot {}
 sync_robot!(SimRobot);
