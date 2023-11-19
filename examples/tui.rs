@@ -1,4 +1,4 @@
-use std::{ffi::OsString, io::stdout, path::PathBuf, task::Poll};
+use std::{ffi::OsString, io::stdout, path::PathBuf, process::exit, task::Poll};
 
 use crossterm::{
     event::{self, KeyCode, KeyEventKind},
@@ -6,6 +6,7 @@ use crossterm::{
     ExecutableCommand,
 };
 use futures::TryStreamExt;
+use indoc::indoc;
 use pros_simulator::{
     host::lcd::{LcdLines, LCD_HEIGHT, LCD_WIDTH},
     interface::SimulatorEvent,
@@ -29,6 +30,38 @@ async fn main() {
     app().await.unwrap();
 }
 async fn app() -> anyhow::Result<()> {
+    let mut synchronous_redraws = false;
+    let mut input_file = None;
+
+    let mut args = std::env::args_os();
+    args.next();
+    for arg in args {
+        match arg.to_str() {
+            Some("--help") => {
+                const HELP: &str = indoc! {"
+                    tui [OPTIONS] [INPUT]
+
+                    OPTIONS:
+                        --help                  Print this help message
+                        --synchronous-redraws   Always keep the screen up to date with the simulator
+                                                state. Slower, but useful when using breakpoints.
+                "};
+                println!("{HELP}");
+                exit(1);
+            }
+            Some("--synchronous-redraws") => {
+                synchronous_redraws = true;
+            }
+            _ => {
+                if input_file.is_none() {
+                    input_file = Some(arg);
+                } else {
+                    return Err(anyhow::anyhow!("Unknown argument"));
+                }
+            }
+        }
+    }
+
     stdout().execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
     let panic_hook = std::panic::take_hook();
@@ -44,21 +77,14 @@ async fn app() -> anyhow::Result<()> {
     let logger = Registry::default().with(tui_log_layer);
     tracing::subscriber::set_global_default(logger)?;
 
-    // tracing_subscriber::fmt()
-    //     .with_env_filter(
-    //         EnvFilter::builder()
-    //             .with_default_directive(LevelFilter::INFO.into())
-    //             .from_env_lossy(),
-    //     )
-    //     .init();
     let args = std::env::args_os().collect::<Vec<_>>();
-    let binary_name = args.get(1).cloned().unwrap_or_else(|| {
+    let binary_name = input_file.unwrap_or_else(|| {
         OsString::from("./example/target/wasm32-unknown-unknown/debug/example.wasm")
     });
     let robot_code = PathBuf::from(binary_name);
 
     let mut lcd_lines = None::<LcdLines>;
-    let mut sim_events = start_simulator(robot_code, true);
+    let mut sim_events = start_simulator(robot_code, synchronous_redraws);
     let mut loading_state = Some(0);
     let mut unpause = None::<oneshot::Sender<()>>;
 

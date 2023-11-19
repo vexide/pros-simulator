@@ -45,3 +45,4 @@ tui-big-text = "0.2.1"
 tui-logger = { version = "0.10.0", features = [
     "tracing-support",
 ], default-features = false }
+indoc = "2.0.4"
