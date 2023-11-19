@@ -24,6 +24,8 @@ PROS Simulator is available in library form, but can also be used from [cargo-pr
 
 ### TUI Interface
 
+![TUI interface](./assets/tui.gif)
+
 To build the example simulator program, you'll need a nightly Rust toolchain and the was32-unknown-unknown target installed. In the `example` directory, run the following command to build:
 
 ```terminal
