@@ -1,0 +1,48 @@
+[package]
+name = "pros-simulator"
+version = "0.2.0"
+edition = "2021"
+authors = ["doinkythederp <doinkythederp@icloud.com>", "pros-rs"]
+license = "MIT"
+repository = "https://github.com/pros-rs/pros-simulator"
+description = "Run PROS robot code without the need for real VEX V5 hardware."
+categories = [
+    "science::robotics",
+    "development-tools",
+    "emulators",
+    "simulation",
+    "wasm",
+]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.75"
+async-trait = "0.1.73"
+futures = { version = "0.3.28", features = ["async-await"] }
+pros-sys = { version = "0.3", features = ["no-link"] }
+slab = "0.4.9"
+tokio = { version = "1.32.0", features = ["macros", "sync", "time"] }
+tracing = "0.1.40"
+wasmtime = { version = "14.0.2", features = ["async"] }
+
+[features]
+default = ["tokio-rt"]
+tokio-rt = ["tokio/rt"]
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+tokio = { version = "1.32.0", features = [
+    "rt",
+    "rt-multi-thread",
+    "macros",
+    "sync",
+    "time",
+] }
+ratatui = "0.24.0"
+crossterm = "0.27.0"
+tui-big-text = "0.2.1"
+tui-logger = { version = "0.10.0", features = [
+    "tracing-support",
+], default-features = false }
+indoc = "2.0.4"

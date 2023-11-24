@@ -1,8 +1,4 @@
 {
-    "rust-analyzer.linkedProjects": [
-        "./example/Cargo.toml",
-        "./Cargo.toml"
-    ],
     "cSpell.words": [
         "opcontrol"
     ]

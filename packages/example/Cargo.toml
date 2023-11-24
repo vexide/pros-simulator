@@ -6,5 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-pros = { git = "https://github.com/pros-rs/pros-rs", branch = "async_runtime" }
+pros = "0.0.10"
 # pros = { path = "../../pros-rs/pros" }
