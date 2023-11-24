@@ -1114,6 +1114,7 @@ dependencies = [
  "crossterm",
  "futures",
  "indoc",
+ "pros-simulator-interface",
  "pros-sys",
  "ratatui",
  "slab",
@@ -1123,6 +1124,13 @@ dependencies = [
  "tui-big-text",
  "tui-logger",
  "wasmtime",
+]
+
+[[package]]
+name = "pros-simulator-interface"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

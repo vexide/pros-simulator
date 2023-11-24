@@ -1,14 +1,10 @@
+use pros_simulator_interface::{LcdLines, SimulatorEvent, LCD_HEIGHT, LCD_WIDTH};
 use pros_sys::error as errno;
 
-use crate::interface::{SimulatorEvent, SimulatorInterface};
-
-pub type LcdLines = [String; LCD_HEIGHT as usize];
+use crate::interface::SimulatorInterface;
 
 #[derive(Debug)]
 pub struct AlreadyInitializedError;
-
-pub const LCD_HEIGHT: u32 = 8;
-pub const LCD_WIDTH: u32 = 50;
 
 pub struct LcdColors {
     pub background: u32,

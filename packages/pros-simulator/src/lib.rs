@@ -9,7 +9,8 @@ use anyhow::{anyhow, Result};
 use host::{
     memory::SharedMemoryExt, task::TaskPool, thread_local::CallerExt, Host, InnerHost, ResultExt,
 };
-use interface::{SimulatorEvent, SimulatorInterface};
+use interface::SimulatorInterface;
+use pros_simulator_interface::SimulatorEvent;
 use pros_sys::TIMEOUT_MAX;
 use tokio::{sync::Mutex, time::sleep};
 use wasmtime::*;

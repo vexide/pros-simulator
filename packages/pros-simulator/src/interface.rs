@@ -1,23 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use wasmtime::WasmBacktrace;
-
-use crate::host::lcd::LcdLines;
-
-#[derive(Debug)]
-pub enum SimulatorEvent {
-    Warning(String),
-
-    RobotCodeLoading,
-    RobotCodeStarting,
-    RobotCodeFinished,
-    RobotCodeError(String, WasmBacktrace),
-
-    LcdInitialized,
-    LcdUpdated(LcdLines),
-    LcdColorsUpdated(u32, u32),
-    LcdShutdown,
-}
+use pros_simulator_interface::SimulatorEvent;
 
 #[derive(Clone)]
 pub struct SimulatorInterface {

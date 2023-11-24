@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::Result;
 use futures::{executor::block_on, FutureExt, Stream};
+use pros_simulator_interface::SimulatorEvent;
 use tokio::{
     sync::{
         mpsc::{self, UnboundedReceiver},
@@ -15,7 +16,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::{interface::SimulatorEvent, simulate};
+use crate::simulate;
 
 pub struct StreamedSimulatorEvent {
     pub inner: SimulatorEvent,
