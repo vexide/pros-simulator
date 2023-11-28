@@ -17,7 +17,6 @@ use wasmtime::*;
 
 pub mod host;
 pub mod interface;
-#[cfg(feature = "tokio-rt")]
 pub mod stream;
 
 /// Simulate the WebAssembly robot program at the given path.

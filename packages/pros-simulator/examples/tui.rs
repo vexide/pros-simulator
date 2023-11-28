@@ -7,11 +7,8 @@ use crossterm::{
 };
 use futures::TryStreamExt;
 use indoc::indoc;
-use pros_simulator::{
-    host::lcd::{LcdLines, LCD_HEIGHT, LCD_WIDTH},
-    interface::SimulatorEvent,
-    stream::start_simulator,
-};
+use pros_simulator::stream::start_simulator;
+use pros_simulator_interface::{LcdLines, SimulatorEvent, LCD_HEIGHT, LCD_WIDTH};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     prelude::{CrosstermBackend, Stylize, Terminal},
