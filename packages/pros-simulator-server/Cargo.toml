@@ -2,6 +2,10 @@
 name = "pros-simulator-server"
 version = "0.1.0"
 edition = "2021"
+description = "Line-delimited JSON server for pros-simulator"
+license = "MIT"
+authors = ["doinkythederp <doinkythederp@icloud.com>", "Pros-rs Contributors"]
+repository = "https://github.com/pros-rs/pros-simulator"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
