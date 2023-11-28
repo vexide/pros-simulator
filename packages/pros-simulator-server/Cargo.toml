@@ -9,5 +9,5 @@ edition = "2021"
 clap = { version = "4.4.9", features = ["derive"] }
 jsonl = "4.0.1"
 pros-simulator = { version = "0.2.0", path = "../pros-simulator", default-features = false }
-pros-simulator-interface = { version = "0.1.0", path = "../pros-simulator-interface" }
+pros-simulator-interface = { version = "0.2.0", path = "../pros-simulator-interface" }
 tokio = { version = "1.34.0", features = ["rt", "macros"] }
