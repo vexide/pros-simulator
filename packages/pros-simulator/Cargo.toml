@@ -1,6 +1,6 @@
 [package]
 name = "pros-simulator"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["doinkythederp <doinkythederp@icloud.com>", "pros-rs"]
 license = "MIT"
@@ -25,7 +25,7 @@ slab = "0.4.9"
 tokio = { version = "1.32.0", features = ["macros", "sync", "time", "rt"] }
 tracing = "0.1.40"
 wasmtime = { version = "14.0.2", features = ["async"] }
-pros-simulator-interface = { version = "0.1.0", path = "../pros-simulator-interface" }
+pros-simulator-interface = { version = "0.2.0", path = "../pros-simulator-interface" }
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
