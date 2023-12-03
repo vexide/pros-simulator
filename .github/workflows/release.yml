@@ -24,10 +24,12 @@ jobs:
         runs-on: ${{ matrix.os }}
         steps:
             - uses: actions/checkout@v4
-            - uses: taiki-e/upload-rust-binary-action@v1
+            - uses: doinkythederp/upload-rust-binary-action@main
               with:
                   bin: pros-simulator-server
                   target: ${{ matrix.target }}
                   token: ${{ secrets.GITHUB_TOKEN }}
                   tar: all
                   checksum: sha256
+                  codesign: "-"
+                  dry-run: ${{ !github.event.release }}
