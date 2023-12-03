@@ -2,12 +2,11 @@
 resolver = "2"
 members = ["packages/*"]
 
-[profile.release-limited-debuginfo]
-inherits = "release"
-lto = "thin"
-debug = "limited"
-
 [profile.release-debuginfo]
 inherits = "release"
+debug = "limited"
+strip = false
+
+[profile.release]
 lto = "thin"
-debug = true
+strip = true
