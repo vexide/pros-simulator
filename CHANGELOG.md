@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - LCD width is now smaller (50 -> 40)
 
-## Changed
+### Changed
 
 - Updated `wasmtime` to v15
 
