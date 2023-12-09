@@ -7,6 +7,7 @@ pub type LcdLines = [String; LCD_HEIGHT as usize];
 #[derive(Debug, Serialize, Deserialize)]
 pub enum SimulatorEvent {
     Warning(String),
+    ConsoleMessage(String),
 
     RobotCodeLoading,
     RobotCodeStarting,

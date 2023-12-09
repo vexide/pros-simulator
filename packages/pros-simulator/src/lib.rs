@@ -213,9 +213,19 @@ pub async fn simulate(robot_code: &Path, interface: impl Into<SimulatorInterface
             let backtrace = WasmBacktrace::force_capture(&caller);
             let data = caller.data().lock().await;
             let abort_msg = data.memory.read_c_str(msg).unwrap();
-            println!("{abort_msg}");
-            println!("{backtrace}");
+            eprintln!("{abort_msg}");
+            eprintln!("{backtrace}");
             exit(1);
+        })
+    })?;
+
+    linker.func_wrap1_async("env", "puts", |caller: Caller<'_, Host>, buffer: u32| {
+        Box::new(async move {
+            let data = caller.data().lock().await;
+            let console_message = data.memory.read_c_str(buffer).unwrap();
+            data.interface
+                .send(SimulatorEvent::ConsoleMessage(console_message));
+            u32::from(true)
         })
     })?;
 
