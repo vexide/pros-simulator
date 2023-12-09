@@ -12,6 +12,6 @@ repository = "https://github.com/pros-rs/pros-simulator"
 [dependencies]
 clap = { version = "4.4", features = ["derive"] }
 jsonl = "4.0"
-pros-simulator = { version = "^0.2.1", path = "../pros-simulator", default-features = false }
-pros-simulator-interface = { version = "0.2", path = "../pros-simulator-interface" }
+pros-simulator = { version = "0.3", path = "../pros-simulator" }
+pros-simulator-interface = { version = "0.3", path = "../pros-simulator-interface" }
 tokio = { version = "1.34", features = ["rt", "macros"] }
