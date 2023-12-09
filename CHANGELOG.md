@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2023-12-8
+
+### Added
+
+- PROS debug terminal support
+
+### Fixed
+
+- LCD width is now smaller (50 -> 40)
+
+## Changed
+
+- Updated `wasmtime` to v15
+
 ## [Server 0.1.1] - 2023-11-27
 
 ### Added
