@@ -8,11 +8,25 @@
                 "$rustc"
             ],
             "group": {
+                "kind": "build"
+            },
+            "options": {
+                "cwd": "${workspaceFolder}/packages/example"
+            },
+            "label": "rust: cargo build example"
+        },
+        {
+            "type": "cargo",
+            "command": "build",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": {
                 "kind": "build",
                 "isDefault": true
             },
             "options": {
-                "cwd": "${workspaceFolder}/example"
+                "cwd": "${workspaceFolder}"
             },
             "label": "rust: cargo build"
         }

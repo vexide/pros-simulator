@@ -96,19 +96,17 @@ impl InnerHost {
         memory: SharedMemory,
         interface: SimulatorInterface,
     ) -> anyhow::Result<Self> {
-        let shared_memory = SharedMemory::new(&engine, MemoryType::shared(18, 16384))?;
-
         Ok(Self {
             autonomous: None,
             initialize: None,
             disabled: None,
             competition_initialize: None,
             op_control: None,
+            tasks: TaskPool::new(engine, memory.clone())?,
             memory,
             lcd: Lcd::new(interface.clone()),
             mutexes: MutexPool::default(),
             wasm_allocator: None,
-            tasks: TaskPool::new(engine, shared_memory)?,
             start_time: Instant::now(),
             interface,
         })

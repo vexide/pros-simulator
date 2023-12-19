@@ -402,7 +402,7 @@ impl TaskPool {
         })
         .typed::<(), ()>(&mut store)
         .unwrap();
-        Ok(self.spawn(instance, store, task_impl)?)
+        self.spawn(instance, store, task_impl)
     }
 
     pub fn by_id(&self, task_id: u32) -> Option<TaskHandle> {

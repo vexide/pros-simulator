@@ -1,3 +1,4 @@
+use anyhow::Context;
 use wasmtime::SharedMemory;
 
 #[derive(Debug)]
@@ -11,7 +12,10 @@ pub trait SharedMemoryExt {
 
 impl SharedMemoryExt for SharedMemory {
     fn read_c_str(&self, ptr: u32) -> anyhow::Result<String> {
-        let data = self.data().get(ptr as usize..).unwrap();
+        let data = self
+            .data()
+            .get(ptr as usize..)
+            .with_context(|| format!("invalid pointer: {}", ptr))?;
         for (index, cell) in data.iter().enumerate() {
             if unsafe { cell.get().read() } == 0 {
                 return Ok(String::from_utf8(

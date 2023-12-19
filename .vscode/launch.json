@@ -24,20 +24,19 @@
             "args": [
                 "--synchronous-redraws"
             ],
-            "preLaunchTask": "rust: cargo build",
+            "preLaunchTask": "rust: cargo build example",
         },
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'pros-simulator'",
+            "name": "Debug executable 'pros-simulator-server'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=pros-simulator",
-                    "--package=pros-simulator"
+                    "--bin=pros-simulator-server",
                 ],
                 "filter": {
-                    "name": "pros-simulator",
+                    "name": "pros-simulator-server",
                     "kind": "bin"
                 },
                 "env": {
@@ -45,9 +44,13 @@
                 }
             },
             "args": [
-                "./example/target/wasm32-unknown-unknown/debug/example.wasm"
+                "--stdio",
+                "./packages/example/target/wasm32-unknown-unknown/debug/example.wasm"
             ],
-            "preLaunchTask": "rust: cargo build",
+            "env": {
+                "RUST_BACKTRACE": "1"
+            },
+            "preLaunchTask": "rust: cargo build example",
             "cwd": "${workspaceFolder}"
         }
     ]

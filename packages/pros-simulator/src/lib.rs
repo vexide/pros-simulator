@@ -54,55 +54,62 @@ pub async fn simulate(
     tracing::info!("JIT compiling your Rust... 🚀");
     interface.send(SimulatorEvent::RobotCodeLoading);
 
-    let tasks = &mut host.lock().await.tasks;
-    let module = Module::from_file(&engine, robot_code)?;
-    let mut store = tasks.create_store(&host)?;
-    let instance = tasks.instantiate(&mut store, &module, &interface).await?;
-
-    // tasks.spawn_closure(
-    //     &instance,
-    //     &host,
-    //     |mut caller: Caller<'_, Host>| async move {
-    //         if let Some(messages) = messages {
-    //             loop {
-    //                 while let Ok(message) = messages.try_recv() {
-    //                     tracing::debug!("Received message: {:?}", message);
-    //                     match message {
-    //                         SimulatorMessage::ControllerUpdate(master, partner) => {
-    //                             eprintln!("Controller update: {master:?} {partner:?}");
-    //                         }
-    //                         SimulatorMessage::LcdButtonsUpdate(a, b, c) => {
-    //                             eprintln!("LCD buttons update: {a:?} {b:?} {c:?}");
-    //                         }
-    //                     }
-    //                 }
-    //                 sleep(Duration::from_millis(20)).await;
-    //             }
-    //         }
-
-    //         Ok(())
-    //     },
-    // )?;
-
-    interface.send(SimulatorEvent::RobotCodeStarting);
-    tracing::info!("Starting the init/opcontrol task... 🏁");
-
-    let initialize = instance.get_typed_func::<(), ()>(&mut store, "initialize")?;
-    let opcontrol = instance.get_typed_func::<(), ()>(&mut store, "opcontrol")?;
-    let robot_code_runner = Func::wrap0_async(&mut store, move |mut caller: Caller<'_, Host>| {
-        Box::new(async move {
-            initialize.call_async(&mut caller, ()).await?;
-            opcontrol.call_async(&mut caller, ()).await?;
-            Ok(())
-        })
-    })
-    .typed::<(), ()>(&mut store)
-    .unwrap();
-
     {
-        let mut host = host.lock().await;
-        host.tasks.spawn(&instance, store, robot_code_runner)?;
+        let mut host_access = host.lock().await;
+
+        let module = Module::from_file(&engine, robot_code)?;
+        let mut store = host_access.tasks.create_store(&host)?;
+        let instance = host_access
+            .tasks
+            .instantiate(&mut store, &module, &interface)
+            .await?;
+
+        // tasks.spawn_closure(
+        //     &instance,
+        //     &host,
+        //     |mut caller: Caller<'_, Host>| async move {
+        //         if let Some(messages) = messages {
+        //             loop {
+        //                 while let Ok(message) = messages.try_recv() {
+        //                     tracing::debug!("Received message: {:?}", message);
+        //                     match message {
+        //                         SimulatorMessage::ControllerUpdate(master, partner) => {
+        //                             eprintln!("Controller update: {master:?} {partner:?}");
+        //                         }
+        //                         SimulatorMessage::LcdButtonsUpdate(a, b, c) => {
+        //                             eprintln!("LCD buttons update: {a:?} {b:?} {c:?}");
+        //                         }
+        //                     }
+        //                 }
+        //                 sleep(Duration::from_millis(20)).await;
+        //             }
+        //         }
+
+        //         Ok(())
+        //     },
+        // )?;
+
+        interface.send(SimulatorEvent::RobotCodeStarting);
+        tracing::info!("Starting the init/opcontrol task... 🏁");
+
+        let initialize = instance.get_typed_func::<(), ()>(&mut store, "initialize")?;
+        let opcontrol = instance.get_typed_func::<(), ()>(&mut store, "opcontrol")?;
+        let robot_code_runner =
+            Func::wrap0_async(&mut store, move |mut caller: Caller<'_, Host>| {
+                Box::new(async move {
+                    initialize.call_async(&mut caller, ()).await?;
+                    opcontrol.call_async(&mut caller, ()).await?;
+                    Ok(())
+                })
+            })
+            .typed::<(), ()>(&mut store)
+            .unwrap();
+
+        host_access
+            .tasks
+            .spawn(&instance, store, robot_code_runner)?;
     }
+
     TaskPool::run_to_completion(&host).await;
     tracing::info!("All tasks are finished. ✅");
     interface.send(SimulatorEvent::RobotCodeFinished);
