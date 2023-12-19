@@ -4,12 +4,21 @@ pub mod multitasking;
 pub mod task;
 pub mod thread_local;
 
-use std::{alloc::Layout, sync::Arc, time::Instant};
+use std::{
+    alloc::Layout,
+    sync::{mpsc::Receiver, Arc},
+    time::Instant,
+};
 
 use async_trait::async_trait;
+use futures::Stream;
 use lcd::Lcd;
+use pros_simulator_interface::SimulatorMessage;
 use tokio::sync::Mutex;
-use wasmtime::{AsContextMut, Caller, Instance, SharedMemory, TypedFunc};
+use wasmtime::{
+    AsContextMut, Caller, Config, Engine, Instance, MemoryType, SharedMemory, TypedFunc,
+    WasmBacktraceDetails,
+};
 
 use self::{multitasking::MutexPool, task::TaskPool};
 use crate::interface::SimulatorInterface;
@@ -77,12 +86,19 @@ pub struct InnerHost {
     pub wasm_allocator: Option<WasmAllocator>,
     pub tasks: TaskPool,
     pub start_time: Instant,
+    /// Interface for simulator output (e.g. log messages)
     pub interface: SimulatorInterface,
 }
 
 impl InnerHost {
-    pub fn new(memory: SharedMemory, interface: SimulatorInterface) -> Self {
-        Self {
+    pub fn new(
+        engine: Engine,
+        memory: SharedMemory,
+        interface: SimulatorInterface,
+    ) -> anyhow::Result<Self> {
+        let shared_memory = SharedMemory::new(&engine, MemoryType::shared(18, 16384))?;
+
+        Ok(Self {
             autonomous: None,
             initialize: None,
             disabled: None,
@@ -92,10 +108,10 @@ impl InnerHost {
             lcd: Lcd::new(interface.clone()),
             mutexes: MutexPool::default(),
             wasm_allocator: None,
-            tasks: TaskPool::new(),
+            tasks: TaskPool::new(engine, shared_memory)?,
             start_time: Instant::now(),
             interface,
-        }
+        })
     }
 }
 #[async_trait]

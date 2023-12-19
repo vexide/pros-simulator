@@ -5,21 +5,33 @@ use core::time::Duration;
 
 use pros::prelude::*;
 
-#[derive(Default)]
 pub struct SimRobot;
+
+impl SimRobot {
+    fn new() -> Self {
+        pros::logger::ProsLogger::init().unwrap();
+        println!("registering");
+        pros::lcd::buttons::register(
+            || {
+                println!("Button pressed!");
+            },
+            Button::Left,
+        );
+        println!("done");
+        Self
+    }
+}
 
 impl Robot for SimRobot {
     fn opcontrol(&mut self) -> pros::Result {
         sleep(Duration::from_secs(2));
-        // pros::task::spawn(|| {
-        //     sleep(Duration::from_secs(1));
-        //     println!("Hello from task!");
-        // });
-        println!("Hello from simulator!");
+        println!("Hello world!");
         sleep(Duration::from_secs(3));
-        println!("Goodbye from simulator!");
-        sleep(Duration::from_secs(1));
+        loop {
+            // info!("Hello from simulator!");
+            sleep(Duration::from_secs(1));
+        }
         Ok(())
     }
 }
-robot!(SimRobot);
+robot!(SimRobot, SimRobot::new());

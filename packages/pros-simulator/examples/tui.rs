@@ -80,7 +80,7 @@ async fn app() -> anyhow::Result<()> {
     let robot_code = PathBuf::from(binary_name);
 
     let mut lcd_lines = None::<LcdLines>;
-    let mut sim_events = start_simulator(robot_code, synchronous_redraws);
+    let mut sim_events = start_simulator(robot_code, synchronous_redraws, None);
     let mut loading_state = Some(0);
     let mut unpause = None::<oneshot::Sender<()>>;
 

@@ -12,7 +12,7 @@ async fn main() -> anyhow::Result<()> {
     });
     let robot_code = PathBuf::from(binary_name);
 
-    let mut sim = start_simulator(robot_code, false);
+    let mut sim = start_simulator(robot_code, false, None);
 
     while let Some(event) = sim.try_next().await? {
         match event.inner {

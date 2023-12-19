@@ -1,7 +1,14 @@
-use std::path::PathBuf;
+use std::{
+    io::{stdin, stdout, BufReader},
+    path::PathBuf,
+    process::exit,
+    sync::mpsc,
+};
 
 use clap::Parser;
-use jsonl::Connection;
+use jsonl::{read, write, ReadError};
+use pros_simulator_interface::SimulatorMessage;
+use tokio::runtime::Handle;
 
 /// Simulate a VEX V5 robot using the PROS API interface.
 #[derive(Parser, Debug)]
@@ -20,10 +27,28 @@ async fn main() {
     let args = Args::parse();
 
     if args.stdio {
-        let mut connection = Connection::new_from_stdio();
-        pros_simulator::simulate(&args.robot_code, move |event| {
-            connection.write(&event).unwrap();
-        })
+        let (tx, rx) = mpsc::channel::<SimulatorMessage>();
+        tokio::task::spawn_blocking(move || {
+            let mut reader = BufReader::new(stdin().lock());
+            loop {
+                let event = read(&mut reader);
+                match event {
+                    Ok(message) => _ = tx.send(message),
+                    Err(ReadError::Eof) => break,
+                    Err(err) => {
+                        eprintln!("Error reading from stdio: {}", err);
+                        exit(1);
+                    }
+                }
+            }
+        });
+        pros_simulator::simulate(
+            &args.robot_code,
+            move |event| {
+                write(stdout().lock(), &event).unwrap();
+            },
+            Some(rx),
+        )
         .await
         .unwrap();
     } else {

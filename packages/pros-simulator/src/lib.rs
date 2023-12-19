@@ -1,16 +1,17 @@
 use std::{
     path::Path,
     process::exit,
-    sync::Arc,
+    sync::{mpsc::Receiver, Arc},
     time::{Duration, Instant},
 };
 
 use anyhow::{anyhow, Result};
+use futures::Stream;
 use host::{
     memory::SharedMemoryExt, task::TaskPool, thread_local::CallerExt, Host, InnerHost, ResultExt,
 };
 use interface::SimulatorInterface;
-use pros_simulator_interface::SimulatorEvent;
+use pros_simulator_interface::{SimulatorEvent, SimulatorMessage};
 use pros_sys::TIMEOUT_MAX;
 use tokio::{sync::Mutex, time::sleep};
 use wasmtime::*;
@@ -26,7 +27,13 @@ pub mod stream;
 /// - `robot_code`: The path to the robot program to simulate.
 /// - `interface`: A callback function that will be invoked with any events that occur during
 ///   simulation.
-pub async fn simulate(robot_code: &Path, interface: impl Into<SimulatorInterface>) -> Result<()> {
+/// - `messages`: Input message stream to send to the robot program. This can be used to simulate
+///  controller input, LCD touch events, and more.
+pub async fn simulate(
+    robot_code: &Path,
+    interface: impl Into<SimulatorInterface>,
+    messages: Option<Receiver<SimulatorMessage>>,
+) -> Result<()> {
     let interface: SimulatorInterface = interface.into();
     tracing::info!("Initializing WASM runtime");
     let engine = Engine::new(
@@ -39,204 +46,47 @@ pub async fn simulate(robot_code: &Path, interface: impl Into<SimulatorInterface
     .unwrap();
     let shared_memory = SharedMemory::new(&engine, MemoryType::shared(18, 16384))?;
     let host = Arc::new(Mutex::new(InnerHost::new(
+        engine.clone(),
         shared_memory.clone(),
         interface.clone(),
-    )));
-
-    let mut linker = Linker::<Host>::new(&engine);
-    let mut store = Store::new(&engine, host.clone());
-
-    linker.define(&mut store, "env", "memory", shared_memory)?;
-    linker.func_wrap0_async("env", "lcd_initialize", |mut caller: Caller<'_, Host>| {
-        Box::new(async move {
-            let mut host = caller.data_mut().lock().await;
-            let res = host.lcd.initialize();
-            drop(host);
-
-            Ok(u32::from(res.is_ok()))
-        })
-    })?;
-
-    linker.func_wrap2_async(
-        "env",
-        "lcd_set_text",
-        |mut caller: Caller<'_, Host>, line: i32, text_ptr: u32| {
-            Box::new(async move {
-                let mut data = caller.data_mut().lock().await;
-                let text = data.memory.read_c_str(text_ptr)?;
-                let res = data.lcd.set_line(line, &text);
-                drop(data);
-                Ok(u32::from(res.use_errno(&mut caller).await))
-            })
-        },
-    )?;
-
-    linker.func_wrap1_async(
-        "env",
-        "lcd_clear_line",
-        |mut caller: Caller<'_, Host>, line: i32| {
-            Box::new(async move {
-                let mut host = caller.data_mut().lock().await;
-                let res = host.lcd.clear_line(line);
-                drop(host);
-                Ok(u32::from(res.use_errno(&mut caller).await))
-            })
-        },
-    )?;
-
-    linker.func_wrap0_async("env", "lcd_clear", |mut caller: Caller<'_, Host>| {
-        Box::new(async move {
-            let mut host = caller.data_mut().lock().await;
-            let res = host.lcd.clear();
-            drop(host);
-            Ok(u32::from(res.use_errno(&mut caller).await))
-        })
-    })?;
-
-    linker.func_wrap0_async("env", "mutex_create", |mut caller: Caller<'_, Host>| {
-        Box::new(async move {
-            let mut host = caller.data_mut().lock().await;
-            let mutex_id = host.mutexes.create_mutex();
-            Ok(mutex_id as u32)
-        })
-    })?;
-
-    linker.func_wrap1_async(
-        "env",
-        "mutex_delete",
-        |mut caller: Caller<'_, Host>, mutex_id: u32| {
-            Box::new(async move {
-                let mut host = caller.data_mut().lock().await;
-                host.mutexes.delete_mutex(mutex_id as usize);
-                Ok(())
-            })
-        },
-    )?;
-
-    linker.func_wrap1_async(
-        "env",
-        "mutex_give",
-        |mut caller: Caller<'_, Host>, mutex_id: u32| {
-            Box::new(async move {
-                let mut host = caller.data_mut().lock().await;
-                host.mutexes.unlock(mutex_id as usize);
-
-                Ok(u32::from(true))
-            })
-        },
-    )?;
-
-    linker.func_wrap2_async(
-        "env",
-        "mutex_take",
-        |mut caller: Caller<'_, Host>, mutex_id: u32, timeout: u32| {
-            Box::new(async move {
-                let mut host = caller.data_mut().lock().await;
-                let timeout = (timeout != TIMEOUT_MAX)
-                    .then(|| Instant::now() + Duration::from_millis(timeout.into()));
-                let success = host.mutexes.lock(mutex_id as usize, timeout).await;
-                Ok(u32::from(success))
-            })
-        },
-    )?;
-
-    linker.func_wrap2_async(
-        "env",
-        "pvTaskGetThreadLocalStoragePointer",
-        |mut caller: Caller<'_, Host>, task_handle: u32, storage_index: i32| {
-            Box::new(async move {
-                let storage = caller.task_storage(task_handle).await;
-                let data = caller.data_mut().lock().await;
-                let memory = data.memory.clone();
-                Ok(storage.get(memory, storage_index))
-            })
-        },
-    )?;
-
-    linker.func_wrap3_async(
-        "env",
-        "vTaskSetThreadLocalStoragePointer",
-        |mut caller: Caller<'_, Host>, task_handle: u32, storage_index: i32, value: u32| {
-            Box::new(async move {
-                let mut storage = caller.task_storage(task_handle).await;
-                let data = caller.data_mut().lock().await;
-                let memory = data.memory.clone();
-                drop(data);
-                storage.set(memory, storage_index, value)
-            })
-        },
-    )?;
-
-    linker.func_wrap0_async("env", "task_get_current", |caller: Caller<'_, Host>| {
-        Box::new(async move {
-            let data = caller.data().lock().await;
-            data.tasks.current().lock().await.id()
-        })
-    })?;
-
-    linker.func_wrap1_async("env", "delay", |_caller: Caller<'_, Host>, millis: u32| {
-        Box::new(async move {
-            sleep(Duration::from_millis(millis.into())).await;
-            Ok(())
-        })
-    })?;
-
-    linker.func_wrap0_async("env", "__errno", |mut caller: Caller<'_, Host>| {
-        Box::new(async move {
-            let data = caller.data_mut().lock().await;
-            let current_task = data.tasks.current();
-            drop(data);
-            let errno = current_task.lock().await.errno(&mut caller).await;
-            Ok(errno.address())
-        })
-    })?;
-
-    linker.func_wrap0_async("env", "millis", |mut caller: Caller<'_, Host>| {
-        Box::new(async move {
-            let data = caller.data_mut().lock().await;
-            let start_time = data.start_time;
-            drop(data);
-            Ok(start_time.elapsed().as_millis() as u32)
-        })
-    })?;
-
-    linker.func_wrap(
-        "env",
-        "__main_argc_argv",
-        |_caller: Caller<'_, Host>, _argc: u32, _argv: u32| {
-            Err::<u32, _>(anyhow!("main() is not implemented in the PROS simulator"))
-        },
-    )?;
-
-    linker.func_wrap1_async("env", "sim_abort", |caller: Caller<'_, Host>, msg: u32| {
-        Box::new(async move {
-            let backtrace = WasmBacktrace::force_capture(&caller);
-            let data = caller.data().lock().await;
-            let abort_msg = data.memory.read_c_str(msg).unwrap();
-            eprintln!("{abort_msg}");
-            eprintln!("{backtrace}");
-            exit(1);
-        })
-    })?;
-
-    linker.func_wrap1_async("env", "puts", |caller: Caller<'_, Host>, buffer: u32| {
-        Box::new(async move {
-            let data = caller.data().lock().await;
-            let console_message = data.memory.read_c_str(buffer).unwrap();
-            data.interface
-                .send(SimulatorEvent::ConsoleMessage(console_message));
-            u32::from(true)
-        })
-    })?;
+    )?));
 
     tracing::info!("JIT compiling your Rust... 🚀");
     interface.send(SimulatorEvent::RobotCodeLoading);
-    let module = Module::from_file(&engine, robot_code)?;
 
-    let instance = linker.instantiate_async(&mut store, &module).await?;
+    let tasks = &mut host.lock().await.tasks;
+    let module = Module::from_file(&engine, robot_code)?;
+    let mut store = tasks.create_store(&host)?;
+    let instance = tasks.instantiate(&mut store, &module, &interface).await?;
+
+    // tasks.spawn_closure(
+    //     &instance,
+    //     &host,
+    //     |mut caller: Caller<'_, Host>| async move {
+    //         if let Some(messages) = messages {
+    //             loop {
+    //                 while let Ok(message) = messages.try_recv() {
+    //                     tracing::debug!("Received message: {:?}", message);
+    //                     match message {
+    //                         SimulatorMessage::ControllerUpdate(master, partner) => {
+    //                             eprintln!("Controller update: {master:?} {partner:?}");
+    //                         }
+    //                         SimulatorMessage::LcdButtonsUpdate(a, b, c) => {
+    //                             eprintln!("LCD buttons update: {a:?} {b:?} {c:?}");
+    //                         }
+    //                     }
+    //                 }
+    //                 sleep(Duration::from_millis(20)).await;
+    //             }
+    //         }
+
+    //         Ok(())
+    //     },
+    // )?;
 
     interface.send(SimulatorEvent::RobotCodeStarting);
     tracing::info!("Starting the init/opcontrol task... 🏁");
+
     let initialize = instance.get_typed_func::<(), ()>(&mut store, "initialize")?;
     let opcontrol = instance.get_typed_func::<(), ()>(&mut store, "opcontrol")?;
     let robot_code_runner = Func::wrap0_async(&mut store, move |mut caller: Caller<'_, Host>| {
@@ -251,7 +101,7 @@ pub async fn simulate(robot_code: &Path, interface: impl Into<SimulatorInterface
 
     {
         let mut host = host.lock().await;
-        host.tasks.spawn(instance, store, robot_code_runner);
+        host.tasks.spawn(&instance, store, robot_code_runner)?;
     }
     TaskPool::run_to_completion(&host).await;
     tracing::info!("All tasks are finished. ✅");
