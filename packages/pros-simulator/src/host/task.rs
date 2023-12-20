@@ -138,7 +138,7 @@ pub struct Task {
     errno: Option<Errno>,
     pub instance: Instance,
     allocator: WasmAllocator,
-    indirect_call_table: Table,
+    pub indirect_call_table: Table,
     store: Arc<Mutex<Store<Host>>>,
     is_finished: bool,
 }

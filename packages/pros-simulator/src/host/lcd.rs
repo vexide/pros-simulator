@@ -2,7 +2,7 @@ use std::mem::replace;
 
 use pros_simulator_interface::{LcdLines, SimulatorEvent, LCD_HEIGHT, LCD_WIDTH};
 use pros_sys::error as errno;
-use wasmtime::{AsContextMut, Module, Store, TypedFunc};
+use wasmtime::{AsContextMut, Module, Store, Table, TypedFunc};
 
 use super::{
     task::{TaskOptions, TaskPool},
@@ -114,18 +114,19 @@ impl Lcd {
     /// but is now, the callback for that button will be called.
     pub async fn press(
         &mut self,
-        task_pool: &mut TaskPool,
-        module: &Module,
-        host: &Host,
+        mut store: impl AsContextMut<Data = impl Send>,
+        callback_table: Table,
         buttons: [bool; 3],
     ) -> anyhow::Result<()> {
         let previous_presses = replace(&mut self.button_presses, buttons);
 
         for (index, button_pressed) in self.button_presses.iter().enumerate() {
             if *button_pressed && !previous_presses[index] {
-                if let Some(callback) = &self.button_callbacks[index] {
-                    let task_opts = TaskOptions::new_extern(task_pool, host, *callback, ())?;
-                    task_pool.spawn(task_opts, module, &self.interface).await?;
+                if let Some(cb_index) = &self.button_callbacks[index] {
+                    let callback = callback_table.get(&mut store, *cb_index).unwrap();
+                    let callback = callback.funcref().unwrap().unwrap();
+                    let callback = callback.typed::<(), ()>(&mut store)?;
+                    callback.call_async(&mut store, ()).await?;
                 }
             }
         }

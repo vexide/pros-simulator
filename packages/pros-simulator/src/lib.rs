@@ -73,14 +73,20 @@ pub async fn simulate(
                         loop {
                             while let Ok(message) = messages.try_recv() {
                                 tracing::debug!("Received message: {:?}", message);
-                                let lcd = &mut caller.data().lock().await.lcd;
                                 match message {
                                     SimulatorMessage::ControllerUpdate(master, partner) => {
-                                        eprintln!("Controller update: {master:?} {partner:?}");
+                                        // eprintln!("Controller update: {master:?} {partner:?}");
                                     }
                                     SimulatorMessage::LcdButtonsUpdate(btns) => {
-                                        eprintln!("LCD buttons update: {btns:?}");
-                                        lcd.set_line(0, &format!("LCD buttons: {btns:?}"));
+                                        let host = caller.data().clone();
+                                        let lcd = &mut host.lock().await.lcd;
+
+                                        let current_task =
+                                            caller.data().lock().await.tasks.current();
+                                        let table = current_task.lock().await.indirect_call_table;
+                                        drop(current_task);
+
+                                        lcd.press(&mut caller, table, btns).await?;
                                     }
                                 }
                             }
