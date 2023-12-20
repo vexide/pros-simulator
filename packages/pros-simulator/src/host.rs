@@ -16,7 +16,7 @@ use lcd::Lcd;
 use pros_simulator_interface::SimulatorMessage;
 use tokio::sync::Mutex;
 use wasmtime::{
-    AsContextMut, Caller, Config, Engine, Instance, MemoryType, SharedMemory, TypedFunc,
+    AsContextMut, Caller, Config, Engine, Instance, MemoryType, Module, SharedMemory, TypedFunc,
     WasmBacktraceDetails,
 };
 
@@ -83,11 +83,11 @@ pub struct InnerHost {
     pub lcd: Lcd,
     /// Pointers to mutexes created with mutex_create
     pub mutexes: MutexPool,
-    pub wasm_allocator: Option<WasmAllocator>,
     pub tasks: TaskPool,
     pub start_time: Instant,
     /// Interface for simulator output (e.g. log messages)
     pub interface: SimulatorInterface,
+    pub module: Module,
 }
 
 impl InnerHost {
@@ -95,6 +95,7 @@ impl InnerHost {
         engine: Engine,
         memory: SharedMemory,
         interface: SimulatorInterface,
+        module: Module,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             autonomous: None,
@@ -106,9 +107,9 @@ impl InnerHost {
             memory,
             lcd: Lcd::new(interface.clone()),
             mutexes: MutexPool::default(),
-            wasm_allocator: None,
             start_time: Instant::now(),
             interface,
+            module,
         })
     }
 }

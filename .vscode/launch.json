@@ -48,7 +48,7 @@
                 "./packages/example/target/wasm32-unknown-unknown/debug/example.wasm"
             ],
             "env": {
-                "RUST_BACKTRACE": "1"
+                // "RUST_BACKTRACE": "1"
             },
             "preLaunchTask": "rust: cargo build example",
             "cwd": "${workspaceFolder}"

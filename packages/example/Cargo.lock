@@ -118,7 +118,6 @@ dependencies = [
 [[package]]
 name = "pros"
 version = "0.0.10"
-source = "git+https://github.com/pros-rs/pros-rs.git?branch=tracing-support#530470605ab598f50db8aee7c7f7051ad974e43e"
 dependencies = [
  "chrono",
  "dlmalloc",
@@ -133,7 +132,6 @@ dependencies = [
 [[package]]
 name = "pros-sys"
 version = "0.3.0"
-source = "git+https://github.com/pros-rs/pros-rs.git?branch=tracing-support#530470605ab598f50db8aee7c7f7051ad974e43e"
 dependencies = [
  "cfg-if",
 ]

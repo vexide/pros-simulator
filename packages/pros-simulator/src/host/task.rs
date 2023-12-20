@@ -1,19 +1,19 @@
 use std::{
     collections::HashMap,
     future::Future,
-    pin::Pin,
+    pin::{pin, Pin},
     process::exit,
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, Context};
 use pros_simulator_interface::SimulatorEvent;
 use pros_sys::TIMEOUT_MAX;
 use tokio::{sync::Mutex, time::sleep};
 use wasmtime::{
-    AsContextMut, Caller, Engine, Func, Instance, Linker, Module, SharedMemory, Store, TypedFunc,
-    WasmBacktrace,
+    AsContextMut, Caller, Engine, Func, Instance, Linker, Module, SharedMemory, Store, Table,
+    TypedFunc, WasmBacktrace, WasmParams,
 };
 
 use super::{
@@ -21,7 +21,7 @@ use super::{
     thread_local::{CallerExt, TaskStorage},
     Host, ResultExt, WasmAllocator,
 };
-use crate::interface::SimulatorInterface;
+use crate::{api::configure_api, interface::SimulatorInterface};
 
 pub enum TaskState {
     Running,
@@ -29,14 +29,116 @@ pub enum TaskState {
     Finished,
 }
 
+pub const TASK_PRIORITIES: u32 = 16;
+
+pub struct TaskOptions {
+    priority: u32,
+    store: Store<Host>,
+    entrypoint: TypedFunc<(), ()>,
+    name: Option<String>,
+}
+
+impl TaskOptions {
+    /// Create options for a task who's entrypoint is a function from robot code.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - The task pool to create the task in.
+    /// * `host` - The host to use for the task.
+    /// * `task_start` - The index of the task entrypoint in the task table.
+    ///   Function pointers are transformed into indices in the `__indirect_function_table`
+    ///   by the linker.
+    /// * `args` - The arguments to pass to the task entrypoint.
+    pub fn new_extern<P: WasmParams + 'static>(
+        pool: &mut TaskPool,
+        host: &Host,
+        task_start: u32,
+        args: P,
+    ) -> anyhow::Result<Self> {
+        let args = Arc::new(Mutex::new(Some(args)));
+        Self::new_closure(pool, host, move |mut caller| {
+            let args = args.clone();
+            Box::new(async move {
+                let entrypoint = {
+                    let current_task = caller.data().lock().await.tasks.current();
+                    let table = current_task.lock().await.indirect_call_table;
+                    table
+                        .get(&mut caller, task_start)
+                        .context("Task entrypoint is out of bounds")?
+                };
+
+                let entrypoint = entrypoint
+                    .funcref()
+                    .context("Task entrypoint is not a function")?
+                    .context("Task entrypoint is NULL")?
+                    .typed::<P, ()>(&mut caller)
+                    .context("Task entrypoint has invalid signature")?;
+
+                entrypoint
+                    .call_async(&mut caller, args.lock().await.take().unwrap())
+                    .await?;
+                Ok(())
+            })
+        })
+    }
+
+    /// Create options for a task who's entrypoint is a custom closure created by the host.
+    /// These are treated the same as "real" tasks that have entrypoints in robot code.
+    pub fn new_closure(
+        pool: &mut TaskPool,
+        host: &Host,
+        task_closure: impl for<'a> FnOnce(
+                Caller<'a, Host>,
+            ) -> Box<dyn Future<Output = anyhow::Result<()>> + Send + 'a>
+            + Send
+            + 'static,
+    ) -> anyhow::Result<Self> {
+        let mut store = pool.create_store(host)?;
+        let task_closure = Arc::new(Mutex::new(Some(task_closure)));
+        let entrypoint = Func::wrap0_async(&mut store, move |caller: Caller<'_, Host>| {
+            let task_closure = task_closure.clone();
+            Box::new(async move {
+                let task_closure = task_closure
+                    .lock()
+                    .await
+                    .take()
+                    .expect("Expected task to only be started once");
+                Pin::from(task_closure(caller)).await;
+                Ok(())
+            })
+        })
+        .typed::<(), ()>(&mut store)?;
+
+        Ok(Self {
+            priority: 7,
+            entrypoint,
+            store,
+            name: None,
+        })
+    }
+
+    pub fn name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    pub fn priority(mut self, priority: u32) -> Self {
+        assert!(priority < TASK_PRIORITIES);
+        self.priority = priority;
+        self
+    }
+}
+
 pub struct Task {
     id: u32,
+    name: String,
     local_storage: Option<TaskStorage>,
     task_impl: TypedFunc<(), ()>,
     priority: u32,
     errno: Option<Errno>,
-    // instance: Instance,
+    pub instance: Instance,
     allocator: WasmAllocator,
+    indirect_call_table: Table,
     store: Arc<Mutex<Store<Host>>>,
     is_finished: bool,
 }
@@ -44,20 +146,26 @@ pub struct Task {
 impl Task {
     fn new(
         id: u32,
+        name: String,
         mut store: Store<Host>,
-        instance: &Instance,
+        instance: Instance,
         task_impl: TypedFunc<(), ()>,
-    ) -> TaskHandle {
-        Arc::new(Mutex::new(Self {
+    ) -> Self {
+        Self {
             id,
+            name,
             local_storage: None,
             task_impl,
             priority: 0,
             errno: None,
-            allocator: WasmAllocator::new(&mut store, instance),
+            allocator: WasmAllocator::new(&mut store, &instance),
+            indirect_call_table: instance
+                .get_table(&mut store, "__indirect_function_table")
+                .unwrap(),
+            instance,
             store: Arc::new(Mutex::new(store)),
             is_finished: false,
-        }))
+        }
     }
 
     pub async fn local_storage(
@@ -139,210 +247,7 @@ impl TaskPool {
     ) -> anyhow::Result<Instance> {
         let mut linker = Linker::<Host>::new(&self.engine);
 
-        linker.define(&mut *store, "env", "memory", self.shared_memory.clone())?;
-
-        linker.func_wrap0_async("env", "lcd_initialize", |mut caller: Caller<'_, Host>| {
-            Box::new(async move {
-                let mut host = caller.data().lock().await;
-                let res = host.lcd.initialize();
-                drop(host);
-
-                Ok(u32::from(res.is_ok()))
-            })
-        })?;
-
-        linker.func_wrap2_async(
-            "env",
-            "lcd_set_text",
-            |mut caller: Caller<'_, Host>, line: i32, text_ptr: u32| {
-                Box::new(async move {
-                    let mut data = caller.data().lock().await;
-                    let text = data.memory.read_c_str(text_ptr)?;
-                    let res = data.lcd.set_line(line, &text);
-                    drop(data);
-                    Ok(u32::from(res.use_errno(&mut caller).await))
-                })
-            },
-        )?;
-
-        linker.func_wrap1_async(
-            "env",
-            "lcd_clear_line",
-            |mut caller: Caller<'_, Host>, line: i32| {
-                Box::new(async move {
-                    let mut host = caller.data().lock().await;
-                    let res = host.lcd.clear_line(line);
-                    drop(host);
-                    Ok(u32::from(res.use_errno(&mut caller).await))
-                })
-            },
-        )?;
-
-        linker.func_wrap0_async("env", "lcd_clear", |mut caller: Caller<'_, Host>| {
-            Box::new(async move {
-                let mut host = caller.data().lock().await;
-                let res = host.lcd.clear();
-                drop(host);
-                Ok(u32::from(res.use_errno(&mut caller).await))
-            })
-        })?;
-
-        // for lcd_button in 0..3 {
-        //     linker.func_wrap1_async(
-        //         "env",
-        //         &format!("lcd_register_btn{lcd_button}_cb"),
-        //         move |mut caller: Caller<'_, Host>, cb: Option<Func>| {
-        //             Box::new(async move {
-        //                 if let Some(cb) = cb {
-        //                     let cb = cb.typed(&mut caller)?;
-        //                     let res = {
-        //                         let mut host = caller.data().lock().await;
-        //                         host.lcd.set_btn_press_callback(lcd_button, cb)
-        //                     };
-        //                     Ok(u32::from(res.use_errno(&mut caller).await))
-        //                 } else {
-        //                     bail!("Expected non-null callback")
-        //                 }
-        //             })
-        //         },
-        //     )?;
-        // }
-
-        linker.func_wrap0_async("env", "mutex_create", |mut caller: Caller<'_, Host>| {
-            Box::new(async move {
-                let mut host = caller.data().lock().await;
-                let mutex_id = host.mutexes.create_mutex();
-                Ok(mutex_id as u32)
-            })
-        })?;
-
-        linker.func_wrap1_async(
-            "env",
-            "mutex_delete",
-            |mut caller: Caller<'_, Host>, mutex_id: u32| {
-                Box::new(async move {
-                    let mut host = caller.data().lock().await;
-                    host.mutexes.delete_mutex(mutex_id as usize);
-                    Ok(())
-                })
-            },
-        )?;
-
-        linker.func_wrap1_async(
-            "env",
-            "mutex_give",
-            |mut caller: Caller<'_, Host>, mutex_id: u32| {
-                Box::new(async move {
-                    let mut host = caller.data().lock().await;
-                    host.mutexes.unlock(mutex_id as usize);
-
-                    Ok(u32::from(true))
-                })
-            },
-        )?;
-
-        linker.func_wrap2_async(
-            "env",
-            "mutex_take",
-            |mut caller: Caller<'_, Host>, mutex_id: u32, timeout: u32| {
-                Box::new(async move {
-                    let mut host = caller.data().lock().await;
-                    let timeout = (timeout != TIMEOUT_MAX)
-                        .then(|| Instant::now() + Duration::from_millis(timeout.into()));
-                    let success = host.mutexes.lock(mutex_id as usize, timeout).await;
-                    Ok(u32::from(success))
-                })
-            },
-        )?;
-
-        linker.func_wrap2_async(
-            "env",
-            "pvTaskGetThreadLocalStoragePointer",
-            |mut caller: Caller<'_, Host>, task_handle: u32, storage_index: i32| {
-                Box::new(async move {
-                    let storage = caller.task_storage(task_handle).await;
-                    let data = caller.data().lock().await;
-                    let memory = data.memory.clone();
-                    Ok(storage.get(memory, storage_index))
-                })
-            },
-        )?;
-
-        linker.func_wrap3_async(
-            "env",
-            "vTaskSetThreadLocalStoragePointer",
-            |mut caller: Caller<'_, Host>, task_handle: u32, storage_index: i32, value: u32| {
-                Box::new(async move {
-                    let mut storage = caller.task_storage(task_handle).await;
-                    let data = caller.data().lock().await;
-                    let memory = data.memory.clone();
-                    drop(data);
-                    storage.set(memory, storage_index, value)
-                })
-            },
-        )?;
-
-        linker.func_wrap0_async("env", "task_get_current", |caller: Caller<'_, Host>| {
-            Box::new(async move {
-                let data = caller.data().lock().await;
-                data.tasks.current().lock().await.id()
-            })
-        })?;
-
-        linker.func_wrap1_async("env", "delay", |_caller: Caller<'_, Host>, millis: u32| {
-            Box::new(async move {
-                sleep(Duration::from_millis(millis.into())).await;
-                Ok(())
-            })
-        })?;
-
-        linker.func_wrap0_async("env", "__errno", |mut caller: Caller<'_, Host>| {
-            Box::new(async move {
-                let data = caller.data().lock().await;
-                let current_task = data.tasks.current();
-                drop(data);
-                let errno = current_task.lock().await.errno(&mut caller).await;
-                Ok(errno.address())
-            })
-        })?;
-
-        linker.func_wrap0_async("env", "millis", |mut caller: Caller<'_, Host>| {
-            Box::new(async move {
-                let data = caller.data().lock().await;
-                let start_time = data.start_time;
-                drop(data);
-                Ok(start_time.elapsed().as_millis() as u32)
-            })
-        })?;
-
-        linker.func_wrap(
-            "env",
-            "__main_argc_argv",
-            |_caller: Caller<'_, Host>, _argc: u32, _argv: u32| {
-                Err::<u32, _>(anyhow!("main() is not implemented in the PROS simulator"))
-            },
-        )?;
-
-        linker.func_wrap1_async("env", "sim_abort", |caller: Caller<'_, Host>, msg: u32| {
-            Box::new(async move {
-                let backtrace = WasmBacktrace::force_capture(&caller);
-                let data = caller.data().lock().await;
-                let abort_msg = data.memory.read_c_str(msg).unwrap();
-                eprintln!("{abort_msg}");
-                eprintln!("{backtrace}");
-                exit(1);
-            })
-        })?;
-
-        linker.func_wrap1_async("env", "puts", |caller: Caller<'_, Host>, buffer: u32| {
-            Box::new(async move {
-                let data = caller.data().lock().await;
-                let console_message = data.memory.read_c_str(buffer).unwrap();
-                data.interface
-                    .send(SimulatorEvent::ConsoleMessage(console_message));
-                u32::from(true)
-            })
-        })?;
+        configure_api(&mut linker, store, self.shared_memory.clone())?;
 
         for import in module.imports() {
             if linker
@@ -362,47 +267,36 @@ impl TaskPool {
         Ok(instance)
     }
 
-    pub fn spawn(
+    pub async fn spawn(
         &mut self,
-        instance: &Instance,
-        store: Store<Host>,
-        task_impl: TypedFunc<(), ()>,
+        opts: TaskOptions,
+        module: &Module,
+        interface: &SimulatorInterface,
     ) -> anyhow::Result<TaskHandle> {
+        let TaskOptions {
+            priority,
+            entrypoint,
+            mut store,
+            name,
+            ..
+        } = opts;
+
+        let instance = self.instantiate(&mut store, module, interface).await?;
+
         self.newest_task_id += 1;
         let id = self.newest_task_id;
 
-        let task = Task::new(id, store, instance, task_impl);
+        let mut task = Task::new(
+            id,
+            name.unwrap_or_else(|| format!("Task {id}")),
+            store,
+            instance,
+            entrypoint,
+        );
+        task.priority = priority;
+        let task = Arc::new(Mutex::new(task));
         self.pool.insert(id, task.clone());
         Ok(task)
-    }
-
-    pub fn spawn_closure<T, R>(
-        &mut self,
-        instance: &Instance,
-        host: &Host,
-        task_closure: T,
-    ) -> anyhow::Result<TaskHandle>
-    where
-        T: 'static + Send + FnOnce(Caller<'_, Host>) -> R,
-        R: Future<Output = anyhow::Result<()>> + Send + 'static,
-    {
-        let mut store = self.create_store(host)?;
-        let task_closure = Arc::new(Mutex::new(Some(task_closure)));
-        let task_impl = Func::wrap0_async(&mut store, move |caller: Caller<'_, Host>| {
-            let task_closure = task_closure.clone();
-            Box::new(async move {
-                let task_closure = task_closure
-                    .lock()
-                    .await
-                    .take()
-                    .expect("Expected task to only be started once");
-                task_closure(caller).await?;
-                Ok(())
-            })
-        })
-        .typed::<(), ()>(&mut store)
-        .unwrap();
-        self.spawn(instance, store, task_impl)
     }
 
     pub fn by_id(&self, task_id: u32) -> Option<TaskHandle> {

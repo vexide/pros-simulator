@@ -2,9 +2,12 @@ use std::mem::replace;
 
 use pros_simulator_interface::{LcdLines, SimulatorEvent, LCD_HEIGHT, LCD_WIDTH};
 use pros_sys::error as errno;
-use wasmtime::{AsContextMut, Store, TypedFunc};
+use wasmtime::{AsContextMut, Module, Store, TypedFunc};
 
-use super::Host;
+use super::{
+    task::{TaskOptions, TaskPool},
+    Host, InnerHost,
+};
 use crate::interface::SimulatorInterface;
 
 #[derive(Debug)]
@@ -20,7 +23,7 @@ pub struct Lcd {
     interface: SimulatorInterface,
     initialized: bool,
     button_presses: [bool; 3],
-    button_callbacks: [Option<TypedFunc<(), ()>>; 3],
+    button_callbacks: [Option<u32>; 3],
 }
 
 impl Lcd {
@@ -100,11 +103,7 @@ impl Lcd {
         Ok(())
     }
 
-    pub fn set_btn_press_callback(
-        &mut self,
-        button: usize,
-        callback: TypedFunc<(), ()>,
-    ) -> Result<(), i32> {
+    pub fn set_btn_press_callback(&mut self, button: usize, callback: u32) -> Result<(), i32> {
         self.assert_initialized()?;
 
         self.button_callbacks[button] = Some(callback);
@@ -115,7 +114,9 @@ impl Lcd {
     /// but is now, the callback for that button will be called.
     pub async fn press(
         &mut self,
-        store: &mut Store<Host>,
+        task_pool: &mut TaskPool,
+        module: &Module,
+        host: &Host,
         buttons: [bool; 3],
     ) -> anyhow::Result<()> {
         let previous_presses = replace(&mut self.button_presses, buttons);
@@ -123,7 +124,8 @@ impl Lcd {
         for (index, button_pressed) in self.button_presses.iter().enumerate() {
             if *button_pressed && !previous_presses[index] {
                 if let Some(callback) = &self.button_callbacks[index] {
-                    callback.call_async(&mut *store, ()).await?;
+                    let task_opts = TaskOptions::new_extern(task_pool, host, *callback, ())?;
+                    task_pool.spawn(task_opts, module, &self.interface).await?;
                 }
             }
         }
