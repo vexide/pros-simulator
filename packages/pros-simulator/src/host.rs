@@ -74,11 +74,6 @@ impl WasmAllocator {
 pub type Host = Arc<Mutex<InnerHost>>;
 
 pub struct InnerHost {
-    pub autonomous: Option<TypedFunc<(), ()>>,
-    pub initialize: Option<TypedFunc<(), ()>>,
-    pub disabled: Option<TypedFunc<(), ()>>,
-    pub competition_initialize: Option<TypedFunc<(), ()>>,
-    pub op_control: Option<TypedFunc<(), ()>>,
     pub memory: SharedMemory,
     pub lcd: Lcd,
     /// Pointers to mutexes created with mutex_create
@@ -98,11 +93,6 @@ impl InnerHost {
         module: Module,
     ) -> anyhow::Result<Self> {
         Ok(Self {
-            autonomous: None,
-            initialize: None,
-            disabled: None,
-            competition_initialize: None,
-            op_control: None,
             tasks: TaskPool::new(engine, memory.clone())?,
             memory,
             lcd: Lcd::new(interface.clone()),

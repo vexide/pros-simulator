@@ -122,10 +122,12 @@ impl Lcd {
 
         for (index, button_pressed) in self.button_presses.iter().enumerate() {
             if *button_pressed && !previous_presses[index] {
+                eprintln!("Calling callback for button {}", index);
                 if let Some(cb_index) = &self.button_callbacks[index] {
+                    eprintln!("CB exists");
                     let callback = callback_table.get(&mut store, *cb_index).unwrap();
                     let callback = callback.funcref().unwrap().unwrap();
-                    let callback = callback.typed::<(), ()>(&mut store)?;
+                    let callback = callback.typed::<(), ()>(&mut store).unwrap();
                     callback.call_async(&mut store, ()).await?;
                 }
             }

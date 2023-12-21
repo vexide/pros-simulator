@@ -4,6 +4,7 @@ use std::{
     pin::{pin, Pin},
     process::exit,
     sync::Arc,
+    task::Poll,
     time::{Duration, Instant},
 };
 
@@ -103,8 +104,7 @@ impl TaskOptions {
                     .await
                     .take()
                     .expect("Expected task to only be started once");
-                Pin::from(task_closure(caller)).await;
-                Ok(())
+                Pin::from(task_closure(caller)).await
             })
         })
         .typed::<(), ()>(&mut store)?;
@@ -193,12 +193,12 @@ impl Task {
         self.id
     }
 
-    pub fn start(&mut self) -> impl Future<Output = ()> {
+    pub fn start(&mut self) -> impl Future<Output = anyhow::Result<()>> {
         let store = self.store.clone();
         let task_impl = self.task_impl;
         async move {
             let mut store = store.lock().await;
-            task_impl.call_async(&mut *store, ()).await.unwrap();
+            task_impl.call_async(&mut *store, ()).await
         }
     }
 
@@ -351,13 +351,14 @@ impl TaskPool {
         self.current_task.is_some()
     }
 
-    pub async fn run_to_completion(host: &Host) {
-        let mut futures = HashMap::<u32, Pin<Box<dyn Future<Output = ()> + Send>>>::new();
+    pub async fn run_to_completion(host: &Host) -> anyhow::Result<()> {
+        let mut futures =
+            HashMap::<u32, Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>>::new();
         loop {
             let mut host_inner = host.lock().await;
             let running = host_inner.tasks.cycle_tasks().await;
             if !running {
-                break;
+                break Ok(());
             }
 
             let task = host_inner.tasks.current().clone();
@@ -368,10 +369,11 @@ impl TaskPool {
             drop(task);
 
             let result = futures::poll!(future);
-            if result.is_ready() {
+            if let Poll::Ready(result) = result {
                 futures.remove(&id);
                 let mut host = host.lock().await;
                 host.tasks.pool.remove(&id);
+                result?;
             }
         }
     }

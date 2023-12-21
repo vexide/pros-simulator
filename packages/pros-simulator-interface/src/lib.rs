@@ -74,4 +74,5 @@ pub enum SimulatorMessage {
     /// whether each button is being pressed, from left to right. This API technically supports
     /// pressing multiple buttons at once, but that won't ever happen on a real robot.
     LcdButtonsUpdate([bool; 3]),
+    // {"LcdButtonsUpdate": [true, false, false]}
 }

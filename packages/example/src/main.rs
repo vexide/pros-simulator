@@ -11,12 +11,12 @@ impl SimRobot {
     fn new() -> Self {
         pros::logger::ProsLogger::init().unwrap();
         println!("registering");
-        // pros::lcd::buttons::register(
-        //     || {
-        //         println!("Button pressed!");
-        //     },
-        //     Button::Left,
-        // );
+        pros::lcd::buttons::register(
+            || {
+                println!("Left button pressed!");
+            },
+            Button::Left,
+        );
         println!("done");
         Self
     }

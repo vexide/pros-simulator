@@ -81,6 +81,7 @@ pub fn configure_api(
                 Box::new(async move {
                     let res = {
                         let mut host = caller.data().lock().await;
+                        eprintln!("Registering callback for button {}", lcd_button);
                         host.lcd.set_btn_press_callback(lcd_button, cb)
                     };
                     Ok(u32::from(res.use_errno(&mut caller).await))

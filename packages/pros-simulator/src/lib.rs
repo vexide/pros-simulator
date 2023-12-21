@@ -72,21 +72,23 @@ pub async fn simulate(
                     if let Some(messages) = messages {
                         loop {
                             while let Ok(message) = messages.try_recv() {
-                                tracing::debug!("Received message: {:?}", message);
+                                eprintln!("Received message: {:?}", message);
                                 match message {
                                     SimulatorMessage::ControllerUpdate(master, partner) => {
                                         // eprintln!("Controller update: {master:?} {partner:?}");
                                     }
                                     SimulatorMessage::LcdButtonsUpdate(btns) => {
                                         let host = caller.data().clone();
-                                        let lcd = &mut host.lock().await.lcd;
+                                        let mut host = host.lock().await;
+                                        let current_task = host.tasks.current();
+                                        let lcd = &mut host.lcd;
 
-                                        let current_task =
-                                            caller.data().lock().await.tasks.current();
                                         let table = current_task.lock().await.indirect_call_table;
                                         drop(current_task);
 
+                                        eprintln!("LCD update");
                                         lcd.press(&mut caller, table, btns).await?;
+                                        eprintln!("LCD update done");
                                     }
                                 }
                             }
@@ -114,7 +116,7 @@ pub async fn simulate(
             move |mut caller: Caller<'_, Host>| {
                 Box::new(async move {
                     let current_task = caller.data().lock().await.tasks.current();
-                    let instance = current_task.lock().await.instance.clone();
+                    let instance = current_task.lock().await.instance;
                     let initialize =
                         instance.get_typed_func::<(), ()>(&mut caller, "initialize")?;
                     let opcontrol = instance.get_typed_func::<(), ()>(&mut caller, "opcontrol")?;
