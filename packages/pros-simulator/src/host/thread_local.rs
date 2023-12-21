@@ -1,9 +1,9 @@
 use std::mem::size_of;
 
 use async_trait::async_trait;
-use wasmtime::{AsContextMut, Caller, SharedMemory};
+use wasmtime::{AsContextMut, SharedMemory};
 
-use super::{memory::SharedMemoryExt, Host, HostCtx, WasmAllocator};
+use super::{memory::SharedMemoryExt, HostCtx, WasmAllocator};
 
 pub const NUM_THREAD_LOCAL_STORAGE_POINTERS: usize = 5;
 

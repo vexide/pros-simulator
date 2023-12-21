@@ -3,12 +3,8 @@ use std::mem::replace;
 use pros_simulator_interface::{LcdLines, SimulatorEvent, LCD_HEIGHT, LCD_WIDTH};
 use pros_sys::error as errno;
 use tokio::sync::Mutex;
-use wasmtime::{AsContextMut, Module, Store, Table, TypedFunc};
+use wasmtime::{AsContextMut, Table};
 
-use super::{
-    task::{TaskOptions, TaskPool},
-    Host,
-};
 use crate::interface::SimulatorInterface;
 
 #[derive(Debug)]

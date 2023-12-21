@@ -4,26 +4,18 @@ pub mod multitasking;
 pub mod task;
 pub mod thread_local;
 
-use std::{
-    alloc::Layout,
-    sync::{mpsc::Receiver, Arc},
-    time::Instant,
-};
+use std::{alloc::Layout, sync::Arc, time::Instant};
 
 use async_trait::async_trait;
-use futures::Stream;
 use lcd::Lcd;
-use pros_simulator_interface::SimulatorMessage;
 use tokio::sync::{Mutex, MutexGuard};
 use wasmtime::{
-    AsContext, AsContextMut, Caller, Config, Engine, Instance, MemoryType, Module, SharedMemory,
-    TypedFunc, WasmBacktraceDetails,
+    AsContext, AsContextMut, Caller, Engine, Instance, Module, SharedMemory, TypedFunc,
 };
 
 use self::{
     multitasking::MutexPool,
-    task::{Task, TaskHandle, TaskPool},
-    thread_local::TaskStorage,
+    task::{TaskHandle, TaskPool},
 };
 use crate::interface::SimulatorInterface;
 

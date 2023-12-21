@@ -1,19 +1,10 @@
-use std::{
-    path::Path,
-    process::exit,
-    sync::{mpsc::Receiver, Arc},
-    time::{Duration, Instant},
-};
+use std::{path::Path, sync::mpsc::Receiver, time::Duration};
 
-use anyhow::{anyhow, Result};
-use futures::Stream;
-use host::{
-    memory::SharedMemoryExt, task::TaskPool, thread_local::GetTaskStorage, Host, ResultExt,
-};
+use anyhow::Result;
+use host::{task::TaskPool, Host};
 use interface::SimulatorInterface;
 use pros_simulator_interface::{SimulatorEvent, SimulatorMessage};
-use pros_sys::TIMEOUT_MAX;
-use tokio::{sync::Mutex, time::sleep};
+use tokio::time::sleep;
 use wasmtime::*;
 
 use crate::host::{lcd::Lcd, task::TaskOptions, HostCtx};
@@ -71,7 +62,7 @@ pub async fn simulate(
                         loop {
                             while let Ok(message) = messages.try_recv() {
                                 match message {
-                                    SimulatorMessage::ControllerUpdate(master, partner) => {
+                                    SimulatorMessage::ControllerUpdate(_master, _partner) => {
                                         // eprintln!("Controller update: {master:?} {partner:?}");
                                     }
                                     SimulatorMessage::LcdButtonsUpdate(btns) => {
@@ -130,7 +121,7 @@ pub async fn simulate(
             .await?;
     }
 
-    TaskPool::run_to_completion(&host).await;
+    TaskPool::run_to_completion(&host).await?;
     tracing::info!("All tasks are finished. ✅");
     interface.send(SimulatorEvent::RobotCodeFinished);
 

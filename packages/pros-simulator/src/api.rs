@@ -1,20 +1,12 @@
 use std::{
-    collections::HashMap,
-    future::Future,
-    pin::Pin,
     process::exit,
-    sync::Arc,
     time::{Duration, Instant},
 };
 
-use anyhow::{anyhow, bail};
 use pros_simulator_interface::SimulatorEvent;
 use pros_sys::TIMEOUT_MAX;
-use tokio::{sync::Mutex, time::sleep};
-use wasmtime::{
-    AsContextMut, Caller, Engine, Func, Instance, Linker, Module, SharedMemory, Store, Table,
-    TypedFunc, WasmBacktrace,
-};
+use tokio::time::sleep;
+use wasmtime::{Caller, Linker, SharedMemory, Store, WasmBacktrace};
 
 use crate::host::{
     memory::SharedMemoryExt, task::TaskOptions, thread_local::GetTaskStorage, Host, HostCtx,
@@ -28,7 +20,7 @@ pub fn configure_api(
 ) -> anyhow::Result<()> {
     linker.define(&mut *store, "env", "memory", shared_memory.clone())?;
 
-    linker.func_wrap0_async("env", "lcd_initialize", |mut caller: Caller<'_, Host>| {
+    linker.func_wrap0_async("env", "lcd_initialize", |caller: Caller<'_, Host>| {
         Box::new(async move {
             let res = caller.lcd_lock().await.initialize();
             Ok(u32::from(res.is_ok()))
@@ -83,7 +75,7 @@ pub fn configure_api(
         )?;
     }
 
-    linker.func_wrap0_async("env", "mutex_create", |mut caller: Caller<'_, Host>| {
+    linker.func_wrap0_async("env", "mutex_create", |caller: Caller<'_, Host>| {
         Box::new(async move {
             let mutex_id = caller.mutexes_lock().await.create_mutex();
             Ok(mutex_id as u32)
@@ -93,7 +85,7 @@ pub fn configure_api(
     linker.func_wrap1_async(
         "env",
         "mutex_delete",
-        |mut caller: Caller<'_, Host>, mutex_id: u32| {
+        |caller: Caller<'_, Host>, mutex_id: u32| {
             Box::new(async move {
                 caller.mutexes_lock().await.delete_mutex(mutex_id as usize);
                 Ok(())
@@ -104,7 +96,7 @@ pub fn configure_api(
     linker.func_wrap1_async(
         "env",
         "mutex_give",
-        |mut caller: Caller<'_, Host>, mutex_id: u32| {
+        |caller: Caller<'_, Host>, mutex_id: u32| {
             Box::new(async move {
                 caller.mutexes_lock().await.unlock(mutex_id as usize);
 
@@ -116,7 +108,7 @@ pub fn configure_api(
     linker.func_wrap2_async(
         "env",
         "mutex_take",
-        |mut caller: Caller<'_, Host>, mutex_id: u32, timeout: u32| {
+        |caller: Caller<'_, Host>, mutex_id: u32, timeout: u32| {
             Box::new(async move {
                 let timeout = (timeout != TIMEOUT_MAX)
                     .then(|| Instant::now() + Duration::from_millis(timeout.into()));
@@ -153,6 +145,7 @@ pub fn configure_api(
     )?;
 
     linker.func_wrap0_async("env", "task_get_current", |caller: Caller<'_, Host>| {
+        #[allow(clippy::let_and_return)]
         Box::new(async move {
             let current = caller.current_task().await;
 
@@ -177,7 +170,7 @@ pub fn configure_api(
         })
     })?;
 
-    linker.func_wrap0_async("env", "millis", |mut caller: Caller<'_, Host>| {
+    linker.func_wrap0_async("env", "millis", |caller: Caller<'_, Host>| {
         Box::new(async move { Ok(caller.start_time().elapsed().as_millis() as u32) })
     })?;
 
@@ -209,12 +202,12 @@ pub fn configure_api(
     linker.func_wrap5_async(
         "env",
         "task_create",
-        |mut caller: Caller<'_, Host>,
+        |caller: Caller<'_, Host>,
          function: u32,
          parameters: u32,
          priority: u32,
-         stack_depth: u32,
-         name: u32| {
+         _stack_depth: u32,
+         _name: u32| {
             Box::new(async move {
                 let mut tasks = caller.tasks_lock().await;
                 let opts =

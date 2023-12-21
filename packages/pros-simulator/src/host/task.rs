@@ -1,28 +1,14 @@
-use std::{
-    collections::HashMap,
-    future::Future,
-    pin::{pin, Pin},
-    process::exit,
-    sync::Arc,
-    task::Poll,
-    time::{Duration, Instant},
-};
+use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc, task::Poll};
 
-use anyhow::{anyhow, bail, Context};
+use anyhow::Context;
 use pros_simulator_interface::SimulatorEvent;
-use pros_sys::TIMEOUT_MAX;
-use tokio::{
-    sync::{Mutex, MutexGuard},
-    time::sleep,
-};
+use tokio::sync::{Mutex, MutexGuard};
 use wasmtime::{
     AsContextMut, Caller, Engine, Func, Instance, Linker, Module, SharedMemory, Store, Table,
-    TypedFunc, WasmBacktrace, WasmParams,
+    TypedFunc, WasmParams,
 };
 
-use super::{
-    memory::SharedMemoryExt, thread_local::TaskStorage, Host, HostCtx, ResultExt, WasmAllocator,
-};
+use super::{memory::SharedMemoryExt, thread_local::TaskStorage, Host, HostCtx, WasmAllocator};
 use crate::{api::configure_api, interface::SimulatorInterface};
 
 pub enum TaskState {
@@ -238,7 +224,7 @@ impl TaskPool {
     }
 
     pub fn create_store(&mut self, host: &Host) -> anyhow::Result<Store<Host>> {
-        let mut store = Store::new(&self.engine, host.clone());
+        let store = Store::new(&self.engine, host.clone());
         Ok(store)
     }
 

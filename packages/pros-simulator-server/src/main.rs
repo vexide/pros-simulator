@@ -8,7 +8,6 @@ use std::{
 use clap::Parser;
 use jsonl::{read, write, ReadError};
 use pros_simulator_interface::SimulatorMessage;
-use tokio::runtime::Handle;
 
 /// Simulate a VEX V5 robot using the PROS API interface.
 #[derive(Parser, Debug)]
