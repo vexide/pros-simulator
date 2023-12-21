@@ -1041,7 +1041,7 @@ dependencies = [
 
 [[package]]
 name = "pros-simulator-server"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "clap",
  "jsonl",
