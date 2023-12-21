@@ -1,6 +1,6 @@
 [package]
 name = "pros-simulator"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 authors = ["doinkythederp <doinkythederp@icloud.com>", "pros-rs"]
 license = "MIT"
@@ -24,7 +24,7 @@ pros-sys = { version = "0.3", features = ["no-link"] }
 slab = "0.4.9"
 tokio = { version = "1.32.0", features = ["macros", "sync", "time", "rt"] }
 tracing = "0.1.40"
-wasmtime = { version = "15.0.1", features = [
+wasmtime = { version = "16.0.0", features = [
     "async",
     "cranelift",
     "parallel-compilation",
@@ -32,7 +32,7 @@ wasmtime = { version = "15.0.1", features = [
     "coredump",
     "addr2line",
 ], default-features = false }
-pros-simulator-interface = { version = "0.3.0", path = "../pros-simulator-interface" }
+pros-simulator-interface = { version = "0.4", path = "../pros-simulator-interface" }
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
