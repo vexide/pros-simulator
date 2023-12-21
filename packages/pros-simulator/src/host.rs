@@ -14,13 +14,17 @@ use async_trait::async_trait;
 use futures::Stream;
 use lcd::Lcd;
 use pros_simulator_interface::SimulatorMessage;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, MutexGuard};
 use wasmtime::{
-    AsContextMut, Caller, Config, Engine, Instance, MemoryType, Module, SharedMemory, TypedFunc,
-    WasmBacktraceDetails,
+    AsContext, AsContextMut, Caller, Config, Engine, Instance, MemoryType, Module, SharedMemory,
+    TypedFunc, WasmBacktraceDetails,
 };
 
-use self::{multitasking::MutexPool, task::TaskPool};
+use self::{
+    multitasking::MutexPool,
+    task::{Task, TaskHandle, TaskPool},
+    thread_local::TaskStorage,
+};
 use crate::interface::SimulatorInterface;
 
 /// This struct contains the functions necessary to send buffers to the sandbox.
@@ -71,38 +75,154 @@ impl WasmAllocator {
     }
 }
 
-pub type Host = Arc<Mutex<InnerHost>>;
-
-pub struct InnerHost {
-    pub memory: SharedMemory,
-    pub lcd: Lcd,
-    /// Pointers to mutexes created with mutex_create
-    pub mutexes: MutexPool,
-    pub tasks: TaskPool,
-    pub start_time: Instant,
+#[derive(Clone)]
+pub struct Host {
+    memory: SharedMemory,
+    module: Module,
     /// Interface for simulator output (e.g. log messages)
-    pub interface: SimulatorInterface,
-    pub module: Module,
+    interface: SimulatorInterface,
+    lcd: Arc<Mutex<Lcd>>,
+    /// Pointers to mutexes created with mutex_create
+    mutexes: Arc<Mutex<MutexPool>>,
+    tasks: Arc<Mutex<TaskPool>>,
+    start_time: Instant,
 }
 
-impl InnerHost {
+impl Host {
     pub fn new(
         engine: Engine,
         memory: SharedMemory,
         interface: SimulatorInterface,
         module: Module,
     ) -> anyhow::Result<Self> {
+        let lcd = Lcd::new(interface.clone());
+        let mutexes = MutexPool::default();
+        let tasks = TaskPool::new(engine, memory.clone())?;
+
         Ok(Self {
-            tasks: TaskPool::new(engine, memory.clone())?,
             memory,
-            lcd: Lcd::new(interface.clone()),
-            mutexes: MutexPool::default(),
-            start_time: Instant::now(),
-            interface,
             module,
+            interface,
+            lcd: Arc::new(Mutex::new(lcd)),
+            mutexes: Arc::new(Mutex::new(mutexes)),
+            tasks: Arc::new(Mutex::new(tasks)),
+            start_time: Instant::now(),
         })
     }
 }
+
+#[async_trait]
+pub trait HostCtx {
+    fn memory(&self) -> SharedMemory;
+    fn module(&self) -> Module;
+    fn interface(&self) -> SimulatorInterface;
+    fn lcd(&self) -> Arc<Mutex<Lcd>>;
+    async fn lcd_lock(&self) -> MutexGuard<'_, Lcd>;
+    fn mutexes(&self) -> Arc<Mutex<MutexPool>>;
+    async fn mutexes_lock(&self) -> MutexGuard<'_, MutexPool>;
+    fn tasks(&self) -> Arc<Mutex<TaskPool>>;
+    async fn tasks_lock(&self) -> MutexGuard<'_, TaskPool>;
+    fn start_time(&self) -> Instant;
+    async fn current_task(&self) -> TaskHandle;
+}
+
+#[async_trait]
+impl HostCtx for Host {
+    fn memory(&self) -> SharedMemory {
+        self.memory.clone()
+    }
+
+    fn module(&self) -> Module {
+        self.module.clone()
+    }
+
+    fn interface(&self) -> SimulatorInterface {
+        self.interface.clone()
+    }
+
+    fn lcd(&self) -> Arc<Mutex<Lcd>> {
+        self.lcd.clone()
+    }
+
+    async fn lcd_lock(&self) -> MutexGuard<'_, Lcd> {
+        self.lcd.lock().await
+    }
+
+    fn mutexes(&self) -> Arc<Mutex<MutexPool>> {
+        self.mutexes.clone()
+    }
+
+    async fn mutexes_lock(&self) -> MutexGuard<'_, MutexPool> {
+        self.mutexes.lock().await
+    }
+
+    fn tasks(&self) -> Arc<Mutex<TaskPool>> {
+        self.tasks.clone()
+    }
+
+    async fn tasks_lock(&self) -> MutexGuard<'_, TaskPool> {
+        self.tasks.lock().await
+    }
+
+    fn start_time(&self) -> Instant {
+        self.start_time
+    }
+
+    async fn current_task(&self) -> TaskHandle {
+        self.tasks.lock().await.current()
+    }
+}
+
+#[async_trait]
+impl<T> HostCtx for T
+where
+    T: AsContext<Data = Host> + Sync,
+{
+    fn memory(&self) -> SharedMemory {
+        self.as_context().data().memory()
+    }
+
+    fn module(&self) -> Module {
+        self.as_context().data().module()
+    }
+
+    fn interface(&self) -> SimulatorInterface {
+        self.as_context().data().interface()
+    }
+
+    fn lcd(&self) -> Arc<Mutex<Lcd>> {
+        self.as_context().data().lcd()
+    }
+
+    async fn lcd_lock(&self) -> MutexGuard<'_, Lcd> {
+        self.as_context().data().lcd_lock().await
+    }
+
+    fn mutexes(&self) -> Arc<Mutex<MutexPool>> {
+        self.as_context().data().mutexes()
+    }
+
+    async fn mutexes_lock(&self) -> MutexGuard<'_, MutexPool> {
+        self.as_context().data().mutexes_lock().await
+    }
+
+    fn tasks(&self) -> Arc<Mutex<TaskPool>> {
+        self.as_context().data().tasks()
+    }
+
+    async fn tasks_lock(&self) -> MutexGuard<'_, TaskPool> {
+        self.as_context().data().tasks_lock().await
+    }
+
+    fn start_time(&self) -> Instant {
+        self.as_context().data().start_time()
+    }
+
+    async fn current_task(&self) -> TaskHandle {
+        self.as_context().data().tasks_lock().await.current()
+    }
+}
+
 #[async_trait]
 pub trait ResultExt {
     /// If this result is an error, sets the simulator's [`errno`](Host::errno_address) to the Err value.
@@ -121,10 +241,8 @@ pub trait ResultExt {
 impl<T: Send> ResultExt for Result<T, i32> {
     async fn use_errno(self, caller: &mut Caller<'_, Host>) -> bool {
         if let Err(code) = self {
-            let data = caller.data_mut().lock().await;
-            let current_task = data.tasks.current();
-            let memory = data.memory.clone();
-            drop(data);
+            let current_task = caller.data().tasks_lock().await.current();
+            let memory = caller.data().memory();
             let errno = current_task.lock().await.errno(caller).await;
             errno.set(&memory, code);
         }

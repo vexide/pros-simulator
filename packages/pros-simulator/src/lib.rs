@@ -8,7 +8,7 @@ use std::{
 use anyhow::{anyhow, Result};
 use futures::Stream;
 use host::{
-    memory::SharedMemoryExt, task::TaskPool, thread_local::CallerExt, Host, InnerHost, ResultExt,
+    memory::SharedMemoryExt, task::TaskPool, thread_local::GetTaskStorage, Host, ResultExt,
 };
 use interface::SimulatorInterface;
 use pros_simulator_interface::{SimulatorEvent, SimulatorMessage};
@@ -16,7 +16,7 @@ use pros_sys::TIMEOUT_MAX;
 use tokio::{sync::Mutex, time::sleep};
 use wasmtime::*;
 
-use crate::host::task::TaskOptions;
+use crate::host::{lcd::Lcd, task::TaskOptions, HostCtx};
 
 mod api;
 pub mod host;
@@ -54,41 +54,34 @@ pub async fn simulate(
     let module = Module::from_file(&engine, robot_code)?;
 
     let shared_memory = SharedMemory::new(&engine, MemoryType::shared(18, 16384))?;
-    let host = Arc::new(Mutex::new(InnerHost::new(
+    let host = Host::new(
         engine.clone(),
         shared_memory.clone(),
         interface.clone(),
         module.clone(),
-    )?));
+    )?;
 
     {
-        let mut host_access = host.lock().await;
-
         let sensor_task = TaskOptions::new_closure(
-            &mut host_access.tasks,
+            &mut *host.tasks_lock().await,
             &host,
             move |mut caller: Caller<'_, Host>| {
                 Box::new(async move {
                     if let Some(messages) = messages {
                         loop {
                             while let Ok(message) = messages.try_recv() {
-                                eprintln!("Received message: {:?}", message);
                                 match message {
                                     SimulatorMessage::ControllerUpdate(master, partner) => {
                                         // eprintln!("Controller update: {master:?} {partner:?}");
                                     }
                                     SimulatorMessage::LcdButtonsUpdate(btns) => {
-                                        let host = caller.data().clone();
-                                        let mut host = host.lock().await;
-                                        let current_task = host.tasks.current();
-                                        let lcd = &mut host.lcd;
-
-                                        let table = current_task.lock().await.indirect_call_table;
-                                        drop(current_task);
-
-                                        eprintln!("LCD update");
-                                        lcd.press(&mut caller, table, btns).await?;
-                                        eprintln!("LCD update done");
+                                        let table = {
+                                            let tasks = caller.tasks_lock().await;
+                                            let current_task = tasks.current_lock().await;
+                                            current_task.indirect_call_table
+                                        };
+                                        let lcd = caller.lcd();
+                                        Lcd::press(&lcd, &mut caller, table, btns).await?;
                                     }
                                 }
                             }
@@ -102,8 +95,8 @@ pub async fn simulate(
         )?
         .name("PROS System Daemon");
 
-        host_access
-            .tasks
+        host.tasks_lock()
+            .await
             .spawn(sensor_task, &module, &interface)
             .await?;
 
@@ -111,11 +104,11 @@ pub async fn simulate(
         tracing::info!("Starting the init/opcontrol task... 🏁");
 
         let task_opts = TaskOptions::new_closure(
-            &mut host_access.tasks,
+            &mut *host.tasks_lock().await,
             &host,
             move |mut caller: Caller<'_, Host>| {
                 Box::new(async move {
-                    let current_task = caller.data().lock().await.tasks.current();
+                    let current_task = caller.tasks_lock().await.current();
                     let instance = current_task.lock().await.instance;
                     let initialize =
                         instance.get_typed_func::<(), ()>(&mut caller, "initialize")?;
@@ -131,8 +124,8 @@ pub async fn simulate(
         )?
         .name("User Operator Control (PROS)");
 
-        host_access
-            .tasks
+        host.tasks_lock()
+            .await
             .spawn(task_opts, &module, &interface)
             .await?;
     }

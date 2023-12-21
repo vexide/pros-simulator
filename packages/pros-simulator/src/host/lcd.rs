@@ -2,11 +2,12 @@ use std::mem::replace;
 
 use pros_simulator_interface::{LcdLines, SimulatorEvent, LCD_HEIGHT, LCD_WIDTH};
 use pros_sys::error as errno;
+use tokio::sync::Mutex;
 use wasmtime::{AsContextMut, Module, Store, Table, TypedFunc};
 
 use super::{
     task::{TaskOptions, TaskPool},
-    Host, InnerHost,
+    Host,
 };
 use crate::interface::SimulatorInterface;
 
@@ -113,18 +114,19 @@ impl Lcd {
     /// Marks certain LCD buttons as being pressed. If a button was not pressed before
     /// but is now, the callback for that button will be called.
     pub async fn press(
-        &mut self,
+        lcd: &Mutex<Self>,
         mut store: impl AsContextMut<Data = impl Send>,
         callback_table: Table,
         buttons: [bool; 3],
     ) -> anyhow::Result<()> {
-        let previous_presses = replace(&mut self.button_presses, buttons);
+        let mut lcd = lcd.lock().await;
+        let previous_presses = replace(&mut lcd.button_presses, buttons);
+        let callbacks = lcd.button_callbacks;
+        drop(lcd);
 
-        for (index, button_pressed) in self.button_presses.iter().enumerate() {
+        for (index, button_pressed) in buttons.iter().enumerate() {
             if *button_pressed && !previous_presses[index] {
-                eprintln!("Calling callback for button {}", index);
-                if let Some(cb_index) = &self.button_callbacks[index] {
-                    eprintln!("CB exists");
+                if let Some(cb_index) = &callbacks[index] {
                     let callback = callback_table.get(&mut store, *cb_index).unwrap();
                     let callback = callback.funcref().unwrap().unwrap();
                     let callback = callback.typed::<(), ()>(&mut store).unwrap();

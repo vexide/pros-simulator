@@ -3,7 +3,7 @@ use std::mem::size_of;
 use async_trait::async_trait;
 use wasmtime::{AsContextMut, Caller, SharedMemory};
 
-use super::{memory::SharedMemoryExt, Host, WasmAllocator};
+use super::{memory::SharedMemoryExt, Host, HostCtx, WasmAllocator};
 
 pub const NUM_THREAD_LOCAL_STORAGE_POINTERS: usize = 5;
 
@@ -78,16 +78,22 @@ impl TaskStorage {
 }
 
 #[async_trait]
-pub trait CallerExt {
+pub trait GetTaskStorage {
     async fn task_storage(&mut self, task_handle: u32) -> TaskStorage;
 }
 
 #[async_trait]
-impl<'a> CallerExt for Caller<'a, Host> {
+impl<T, D> GetTaskStorage for T
+where
+    T: HostCtx + wasmtime::AsContextMut<Data = D> + Send,
+    D: Send,
+{
     async fn task_storage(&mut self, task_handle: u32) -> TaskStorage {
-        let data = self.data_mut().lock().await;
-        let task = data.tasks.by_id(task_handle).expect("invalid task handle");
-        drop(data);
+        let task = self
+            .tasks_lock()
+            .await
+            .by_id(task_handle)
+            .expect("invalid task handle");
 
         let mut task = task.lock().await;
         task.local_storage(self).await

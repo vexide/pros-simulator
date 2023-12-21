@@ -17,7 +17,8 @@ use wasmtime::{
 };
 
 use crate::host::{
-    memory::SharedMemoryExt, task::TaskOptions, thread_local::CallerExt, Host, ResultExt,
+    memory::SharedMemoryExt, task::TaskOptions, thread_local::GetTaskStorage, Host, HostCtx,
+    ResultExt,
 };
 
 pub fn configure_api(
@@ -29,10 +30,7 @@ pub fn configure_api(
 
     linker.func_wrap0_async("env", "lcd_initialize", |mut caller: Caller<'_, Host>| {
         Box::new(async move {
-            let mut host = caller.data().lock().await;
-            let res = host.lcd.initialize();
-            drop(host);
-
+            let res = caller.lcd_lock().await.initialize();
             Ok(u32::from(res.is_ok()))
         })
     })?;
@@ -42,10 +40,8 @@ pub fn configure_api(
         "lcd_set_text",
         |mut caller: Caller<'_, Host>, line: i32, text_ptr: u32| {
             Box::new(async move {
-                let mut data = caller.data().lock().await;
-                let text = data.memory.read_c_str(text_ptr)?;
-                let res = data.lcd.set_line(line, &text);
-                drop(data);
+                let text = caller.memory().read_c_str(text_ptr)?;
+                let res = caller.lcd_lock().await.set_line(line, &text);
                 Ok(u32::from(res.use_errno(&mut caller).await))
             })
         },
@@ -56,9 +52,7 @@ pub fn configure_api(
         "lcd_clear_line",
         |mut caller: Caller<'_, Host>, line: i32| {
             Box::new(async move {
-                let mut host = caller.data().lock().await;
-                let res = host.lcd.clear_line(line);
-                drop(host);
+                let res = caller.lcd_lock().await.clear_line(line);
                 Ok(u32::from(res.use_errno(&mut caller).await))
             })
         },
@@ -66,9 +60,7 @@ pub fn configure_api(
 
     linker.func_wrap0_async("env", "lcd_clear", |mut caller: Caller<'_, Host>| {
         Box::new(async move {
-            let mut host = caller.data().lock().await;
-            let res = host.lcd.clear();
-            drop(host);
+            let res = caller.lcd_lock().await.clear();
             Ok(u32::from(res.use_errno(&mut caller).await))
         })
     })?;
@@ -80,9 +72,10 @@ pub fn configure_api(
             move |mut caller: Caller<'_, Host>, cb: u32| {
                 Box::new(async move {
                     let res = {
-                        let mut host = caller.data().lock().await;
-                        eprintln!("Registering callback for button {}", lcd_button);
-                        host.lcd.set_btn_press_callback(lcd_button, cb)
+                        caller
+                            .lcd_lock()
+                            .await
+                            .set_btn_press_callback(lcd_button, cb)
                     };
                     Ok(u32::from(res.use_errno(&mut caller).await))
                 })
@@ -92,8 +85,7 @@ pub fn configure_api(
 
     linker.func_wrap0_async("env", "mutex_create", |mut caller: Caller<'_, Host>| {
         Box::new(async move {
-            let mut host = caller.data().lock().await;
-            let mutex_id = host.mutexes.create_mutex();
+            let mutex_id = caller.mutexes_lock().await.create_mutex();
             Ok(mutex_id as u32)
         })
     })?;
@@ -103,8 +95,7 @@ pub fn configure_api(
         "mutex_delete",
         |mut caller: Caller<'_, Host>, mutex_id: u32| {
             Box::new(async move {
-                let mut host = caller.data().lock().await;
-                host.mutexes.delete_mutex(mutex_id as usize);
+                caller.mutexes_lock().await.delete_mutex(mutex_id as usize);
                 Ok(())
             })
         },
@@ -115,8 +106,7 @@ pub fn configure_api(
         "mutex_give",
         |mut caller: Caller<'_, Host>, mutex_id: u32| {
             Box::new(async move {
-                let mut host = caller.data().lock().await;
-                host.mutexes.unlock(mutex_id as usize);
+                caller.mutexes_lock().await.unlock(mutex_id as usize);
 
                 Ok(u32::from(true))
             })
@@ -128,10 +118,13 @@ pub fn configure_api(
         "mutex_take",
         |mut caller: Caller<'_, Host>, mutex_id: u32, timeout: u32| {
             Box::new(async move {
-                let mut host = caller.data().lock().await;
                 let timeout = (timeout != TIMEOUT_MAX)
                     .then(|| Instant::now() + Duration::from_millis(timeout.into()));
-                let success = host.mutexes.lock(mutex_id as usize, timeout).await;
+                let success = caller
+                    .mutexes_lock()
+                    .await
+                    .lock(mutex_id as usize, timeout)
+                    .await;
                 Ok(u32::from(success))
             })
         },
@@ -143,9 +136,7 @@ pub fn configure_api(
         |mut caller: Caller<'_, Host>, task_handle: u32, storage_index: i32| {
             Box::new(async move {
                 let storage = caller.task_storage(task_handle).await;
-                let data = caller.data().lock().await;
-                let memory = data.memory.clone();
-                Ok(storage.get(memory, storage_index))
+                Ok(storage.get(caller.memory(), storage_index))
             })
         },
     )?;
@@ -156,18 +147,18 @@ pub fn configure_api(
         |mut caller: Caller<'_, Host>, task_handle: u32, storage_index: i32, value: u32| {
             Box::new(async move {
                 let mut storage = caller.task_storage(task_handle).await;
-                let data = caller.data().lock().await;
-                let memory = data.memory.clone();
-                drop(data);
-                storage.set(memory, storage_index, value)
+                storage.set(caller.memory(), storage_index, value)
             })
         },
     )?;
 
     linker.func_wrap0_async("env", "task_get_current", |caller: Caller<'_, Host>| {
         Box::new(async move {
-            let data = caller.data().lock().await;
-            data.tasks.current().lock().await.id()
+            let current = caller.current_task().await;
+
+            let id = current.lock().await.id();
+            // fixing warning causes compile error
+            id
         })
     })?;
 
@@ -180,36 +171,20 @@ pub fn configure_api(
 
     linker.func_wrap0_async("env", "__errno", |mut caller: Caller<'_, Host>| {
         Box::new(async move {
-            let data = caller.data().lock().await;
-            let current_task = data.tasks.current();
-            drop(data);
+            let current_task = caller.current_task().await;
             let errno = current_task.lock().await.errno(&mut caller).await;
             Ok(errno.address())
         })
     })?;
 
     linker.func_wrap0_async("env", "millis", |mut caller: Caller<'_, Host>| {
-        Box::new(async move {
-            let data = caller.data().lock().await;
-            let start_time = data.start_time;
-            drop(data);
-            Ok(start_time.elapsed().as_millis() as u32)
-        })
+        Box::new(async move { Ok(caller.start_time().elapsed().as_millis() as u32) })
     })?;
-
-    linker.func_wrap(
-        "env",
-        "__main_argc_argv",
-        |_caller: Caller<'_, Host>, _argc: u32, _argv: u32| {
-            Err::<u32, _>(anyhow!("main() is not implemented in the PROS simulator"))
-        },
-    )?;
 
     linker.func_wrap1_async("env", "sim_abort", |caller: Caller<'_, Host>, msg: u32| {
         Box::new(async move {
             let backtrace = WasmBacktrace::force_capture(&caller);
-            let data = caller.data().lock().await;
-            let abort_msg = data.memory.read_c_str(msg).unwrap();
+            let abort_msg = caller.memory().read_c_str(msg).unwrap();
             eprintln!("{abort_msg}");
             eprintln!("{backtrace}");
             exit(1);
@@ -218,9 +193,9 @@ pub fn configure_api(
 
     linker.func_wrap1_async("env", "puts", |caller: Caller<'_, Host>, buffer: u32| {
         Box::new(async move {
-            let data = caller.data().lock().await;
-            let console_message = data.memory.read_c_str(buffer).unwrap();
-            data.interface
+            let console_message = caller.memory().read_c_str(buffer).unwrap();
+            caller
+                .interface()
                 .send(SimulatorEvent::ConsoleMessage(console_message));
             u32::from(true)
         })
@@ -237,18 +212,17 @@ pub fn configure_api(
         |mut caller: Caller<'_, Host>,
          function: u32,
          parameters: u32,
-         prio: u32,
+         priority: u32,
          stack_depth: u32,
          name: u32| {
             Box::new(async move {
-                let mut data = caller.data().lock().await;
-                let module = data.module.clone();
-                let interface = data.interface.clone();
-                let host = caller.data().clone();
-
-                let opts = TaskOptions::new_extern(&mut data.tasks, &host, function, parameters)?
-                    .priority(prio - 1);
-                let task = data.tasks.spawn(opts, &module, &interface).await?;
+                let mut tasks = caller.tasks_lock().await;
+                let opts =
+                    TaskOptions::new_extern(&mut tasks, caller.data(), function, parameters)?
+                        .priority(priority - 1);
+                let task = tasks
+                    .spawn(opts, &caller.module(), &caller.interface())
+                    .await?;
 
                 let task = task.lock().await;
                 Ok(task.id())

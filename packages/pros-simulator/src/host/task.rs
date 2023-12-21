@@ -11,16 +11,17 @@ use std::{
 use anyhow::{anyhow, bail, Context};
 use pros_simulator_interface::SimulatorEvent;
 use pros_sys::TIMEOUT_MAX;
-use tokio::{sync::Mutex, time::sleep};
+use tokio::{
+    sync::{Mutex, MutexGuard},
+    time::sleep,
+};
 use wasmtime::{
     AsContextMut, Caller, Engine, Func, Instance, Linker, Module, SharedMemory, Store, Table,
     TypedFunc, WasmBacktrace, WasmParams,
 };
 
 use super::{
-    memory::SharedMemoryExt,
-    thread_local::{CallerExt, TaskStorage},
-    Host, ResultExt, WasmAllocator,
+    memory::SharedMemoryExt, thread_local::TaskStorage, Host, HostCtx, ResultExt, WasmAllocator,
 };
 use crate::{api::configure_api, interface::SimulatorInterface};
 
@@ -61,9 +62,11 @@ impl TaskOptions {
             let args = args.clone();
             Box::new(async move {
                 let entrypoint = {
-                    let current_task = caller.data().lock().await.tasks.current();
-                    let table = current_task.lock().await.indirect_call_table;
-                    table
+                    let tasks = caller.tasks();
+                    let tasks = tasks.lock().await;
+                    let current_task = tasks.current_lock().await;
+                    current_task
+                        .indirect_call_table
                         .get(&mut caller, task_start)
                         .context("Task entrypoint is out of bounds")?
                 };
@@ -312,6 +315,14 @@ impl TaskPool {
             .expect("using the current task may only happen while a task is being executed")
     }
 
+    pub async fn current_lock(&self) -> MutexGuard<'_, Task> {
+        self.current_task
+            .as_ref()
+            .expect("using the current task may only happen while a task is being executed")
+            .lock()
+            .await
+    }
+
     async fn highest_priority_task_ids(&self) -> Vec<u32> {
         let mut highest_priority = 0;
         let mut highest_priority_tasks = vec![];
@@ -355,24 +366,22 @@ impl TaskPool {
         let mut futures =
             HashMap::<u32, Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>>::new();
         loop {
-            let mut host_inner = host.lock().await;
-            let running = host_inner.tasks.cycle_tasks().await;
+            let mut tasks = host.tasks_lock().await;
+            let running = tasks.cycle_tasks().await;
             if !running {
                 break Ok(());
             }
 
-            let task = host_inner.tasks.current().clone();
+            let task = tasks.current().clone();
             let mut task = task.lock().await;
             let id = task.id();
             let future = futures.entry(id).or_insert_with(|| Box::pin(task.start()));
-            drop(host_inner);
-            drop(task);
+            drop((tasks, task));
 
             let result = futures::poll!(future);
             if let Poll::Ready(result) = result {
                 futures.remove(&id);
-                let mut host = host.lock().await;
-                host.tasks.pool.remove(&id);
+                host.tasks_lock().await.pool.remove(&id);
                 result?;
             }
         }
