@@ -22,10 +22,10 @@ pub struct DigitalControllerState {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct AnalogControllerState {
-    pub left_x: i32,
-    pub left_y: i32,
-    pub right_x: i32,
-    pub right_y: i32,
+    pub left_x: i8,
+    pub left_y: i8,
+    pub right_x: i8,
+    pub right_y: i8,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
