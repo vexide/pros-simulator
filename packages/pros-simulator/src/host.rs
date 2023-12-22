@@ -1,3 +1,4 @@
+pub mod controllers;
 pub mod lcd;
 pub mod memory;
 pub mod multitasking;
@@ -8,12 +9,15 @@ use std::{alloc::Layout, sync::Arc, time::Instant};
 
 use async_trait::async_trait;
 use lcd::Lcd;
+use pros_simulator_interface::SimulatorEvent;
 use tokio::sync::{Mutex, MutexGuard};
 use wasmtime::{
     AsContext, AsContextMut, Caller, Engine, Instance, Module, SharedMemory, TypedFunc,
+    WasmBacktrace,
 };
 
 use self::{
+    controllers::Controllers,
     multitasking::MutexPool,
     task::{TaskHandle, TaskPool},
 };
@@ -77,6 +81,7 @@ pub struct Host {
     /// Pointers to mutexes created with mutex_create
     mutexes: Arc<Mutex<MutexPool>>,
     tasks: Arc<Mutex<TaskPool>>,
+    controllers: Arc<Mutex<Controllers>>,
     start_time: Instant,
 }
 
@@ -90,6 +95,7 @@ impl Host {
         let lcd = Lcd::new(interface.clone());
         let mutexes = MutexPool::default();
         let tasks = TaskPool::new(engine, memory.clone())?;
+        let controllers = Controllers::new(None, None);
 
         Ok(Self {
             memory,
@@ -98,6 +104,7 @@ impl Host {
             lcd: Arc::new(Mutex::new(lcd)),
             mutexes: Arc::new(Mutex::new(mutexes)),
             tasks: Arc::new(Mutex::new(tasks)),
+            controllers: Arc::new(Mutex::new(controllers)),
             start_time: Instant::now(),
         })
     }
@@ -116,6 +123,8 @@ pub trait HostCtx {
     async fn tasks_lock(&self) -> MutexGuard<'_, TaskPool>;
     fn start_time(&self) -> Instant;
     async fn current_task(&self) -> TaskHandle;
+    fn controllers(&self) -> Arc<Mutex<Controllers>>;
+    async fn controllers_lock(&self) -> MutexGuard<'_, Controllers>;
 }
 
 #[async_trait]
@@ -162,6 +171,14 @@ impl HostCtx for Host {
 
     async fn current_task(&self) -> TaskHandle {
         self.tasks.lock().await.current()
+    }
+
+    fn controllers(&self) -> Arc<Mutex<Controllers>> {
+        self.controllers.clone()
+    }
+
+    async fn controllers_lock(&self) -> MutexGuard<'_, Controllers> {
+        self.controllers.lock().await
     }
 }
 
@@ -213,31 +230,63 @@ where
     async fn current_task(&self) -> TaskHandle {
         self.as_context().data().tasks_lock().await.current()
     }
+
+    fn controllers(&self) -> Arc<Mutex<Controllers>> {
+        self.as_context().data().controllers()
+    }
+
+    async fn controllers_lock(&self) -> MutexGuard<'_, Controllers> {
+        self.as_context().data().controllers_lock().await
+    }
 }
 
 #[async_trait]
-pub trait ResultExt {
+pub trait ResultExt<T> {
     /// If this result is an error, sets the simulator's [`errno`](Host::errno_address) to the Err value.
     /// Returns `true` if the result was Ok and `false` if it was Err.
     ///
     /// # Example
     ///
     /// ```ignore
-    /// let res = host.lcd.set_line(line, "");
-    /// Ok(res.use_errno(&mut caller).await.into())
+    /// let res = lcd.set_line(line, "");
+    /// Ok(res.unwrap_or_errno(&mut caller).await.into())
     /// ```
-    async fn use_errno(self, caller: &mut Caller<'_, Host>) -> bool;
+    async fn unwrap_or_errno(self, caller: &mut Caller<'_, Host>) -> bool;
+
+    /// If this result is an error, sets the simulator's [`errno`](Host::errno_address) to the Err value.
+    /// Returns the `T` value if the result was Ok and the `error_value` parameter if it was Err.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let res = controllers.get_analog(pros_sys::E_CONTROLLER_MASTER);
+    /// Ok(res.unwrap_or_errno_as(&mut caller, 0).await)
+    /// ```
+    async fn unwrap_or_errno_as(self, caller: &mut Caller<'_, Host>, error_value: T) -> T;
 }
 
 #[async_trait]
-impl<T: Send> ResultExt for Result<T, i32> {
-    async fn use_errno(self, caller: &mut Caller<'_, Host>) -> bool {
+impl<T: Send> ResultExt<T> for Result<T, i32> {
+    async fn unwrap_or_errno(self, caller: &mut Caller<'_, Host>) -> bool {
         if let Err(code) = self {
             let current_task = caller.data().tasks_lock().await.current();
             let memory = caller.data().memory();
-            let errno = current_task.lock().await.errno(caller).await;
+            let errno = current_task.lock().await.errno(&mut *caller).await;
             errno.set(&memory, code);
         }
         self.is_ok()
+    }
+
+    async fn unwrap_or_errno_as(self, caller: &mut Caller<'_, Host>, error_value: T) -> T {
+        match self {
+            Err(code) => {
+                let current_task = caller.data().tasks_lock().await.current();
+                let memory = caller.data().memory();
+                let errno = current_task.lock().await.errno(&mut *caller).await;
+                errno.set(&memory, code);
+                error_value
+            }
+            Ok(value) => value,
+        }
     }
 }

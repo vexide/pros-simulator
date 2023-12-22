@@ -7,12 +7,16 @@ use pros_simulator_interface::{SimulatorEvent, SimulatorMessage};
 use tokio::time::sleep;
 use wasmtime::*;
 
-use crate::host::{lcd::Lcd, task::TaskOptions, HostCtx};
+use crate::{
+    host::{lcd::Lcd, task::TaskOptions, HostCtx},
+    system::system_daemon::system_daemon_initialize,
+};
 
 mod api;
 pub mod host;
 pub mod interface;
 pub mod stream;
+mod system;
 
 /// Simulate the WebAssembly robot program at the given path.
 ///
@@ -53,43 +57,7 @@ pub async fn simulate(
     )?;
 
     {
-        let sensor_task = TaskOptions::new_closure(
-            &mut *host.tasks_lock().await,
-            &host,
-            move |mut caller: Caller<'_, Host>| {
-                Box::new(async move {
-                    if let Some(messages) = messages {
-                        loop {
-                            while let Ok(message) = messages.try_recv() {
-                                match message {
-                                    SimulatorMessage::ControllerUpdate(_master, _partner) => {
-                                        // eprintln!("Controller update: {master:?} {partner:?}");
-                                    }
-                                    SimulatorMessage::LcdButtonsUpdate(btns) => {
-                                        let table = {
-                                            let tasks = caller.tasks_lock().await;
-                                            let current_task = tasks.current_lock().await;
-                                            current_task.indirect_call_table
-                                        };
-                                        let lcd = caller.lcd();
-                                        Lcd::press(&lcd, &mut caller, table, btns).await?;
-                                    }
-                                }
-                            }
-                            sleep(Duration::from_millis(20)).await;
-                        }
-                    }
-
-                    Ok(())
-                })
-            },
-        )?
-        .name("PROS System Daemon");
-
-        host.tasks_lock()
-            .await
-            .spawn(sensor_task, &module, &interface)
-            .await?;
+        system_daemon_initialize(&host, messages).await?;
 
         interface.send(SimulatorEvent::RobotCodeStarting);
         tracing::info!("Starting the init/opcontrol task... 🏁");
@@ -122,7 +90,7 @@ pub async fn simulate(
     }
 
     TaskPool::run_to_completion(&host).await?;
-    tracing::info!("All tasks are finished. ✅");
+    eprintln!("All tasks are finished. ✅");
     interface.send(SimulatorEvent::RobotCodeFinished);
 
     Ok(())

@@ -34,7 +34,7 @@ pub fn configure_api(
             Box::new(async move {
                 let text = caller.memory().read_c_str(text_ptr)?;
                 let res = caller.lcd_lock().await.set_line(line, &text);
-                Ok(u32::from(res.use_errno(&mut caller).await))
+                Ok(u32::from(res.unwrap_or_errno(&mut caller).await))
             })
         },
     )?;
@@ -45,7 +45,7 @@ pub fn configure_api(
         |mut caller: Caller<'_, Host>, line: i32| {
             Box::new(async move {
                 let res = caller.lcd_lock().await.clear_line(line);
-                Ok(u32::from(res.use_errno(&mut caller).await))
+                Ok(u32::from(res.unwrap_or_errno(&mut caller).await))
             })
         },
     )?;
@@ -53,7 +53,7 @@ pub fn configure_api(
     linker.func_wrap0_async("env", "lcd_clear", |mut caller: Caller<'_, Host>| {
         Box::new(async move {
             let res = caller.lcd_lock().await.clear();
-            Ok(u32::from(res.use_errno(&mut caller).await))
+            Ok(u32::from(res.unwrap_or_errno(&mut caller).await))
         })
     })?;
 
@@ -69,7 +69,7 @@ pub fn configure_api(
                             .await
                             .set_btn_press_callback(lcd_button, cb)
                     };
-                    Ok(u32::from(res.use_errno(&mut caller).await))
+                    Ok(u32::from(res.unwrap_or_errno(&mut caller).await))
                 })
             },
         )?;
@@ -221,6 +221,70 @@ pub fn configure_api(
                 Ok(task.id())
             })
         },
+    )?;
+
+    linker.func_wrap2_async(
+        "env",
+        "controller_get_analog",
+        |mut caller: Caller<'_, Host>, id: u32, channel: u32| {
+            Box::new(async move {
+                let controllers = caller.controllers_lock().await;
+                let res = controllers.get_analog(id, channel);
+                drop(controllers);
+                Ok(res.unwrap_or_errno_as(&mut caller, 0).await)
+            })
+        },
+    )?;
+
+    linker.func_wrap2_async(
+        "env",
+        "controller_get_digital",
+        |mut caller: Caller<'_, Host>, id: u32, button: u32| {
+            Box::new(async move {
+                let controllers = caller.controllers_lock().await;
+                let res = controllers.get_digital(id, button);
+                drop(controllers);
+                Ok(i32::from(res.unwrap_or_errno_as(&mut caller, false).await))
+            })
+        },
+    )?;
+
+    linker.func_wrap2_async(
+        "env",
+        "controller_get_digital_new_press",
+        |mut caller: Caller<'_, Host>, id: u32, button: u32| {
+            Box::new(async move {
+                let mut controllers = caller.controllers_lock().await;
+                let res = controllers.get_digital_new_press(id, button);
+                drop(controllers);
+                Ok(i32::from(res.unwrap_or_errno_as(&mut caller, false).await))
+            })
+        },
+    )?;
+
+    linker.func_wrap1_async(
+        "env",
+        "controller_is_connected",
+        |mut caller: Caller<'_, Host>, id: u32| {
+            Box::new(async move {
+                let controllers = caller.controllers_lock().await;
+                let res = controllers.is_connected(id);
+                drop(controllers);
+                Ok(i32::from(res.unwrap_or_errno(&mut caller).await))
+            })
+        },
+    )?;
+
+    linker.func_wrap1_async(
+        "env",
+        "controller_get_battery_capacity",
+        |_caller: Caller<'_, Host>, _id: u32| Box::new(async move { Ok(100i32) }),
+    )?;
+
+    linker.func_wrap1_async(
+        "env",
+        "controller_get_battery_level",
+        |_caller: Caller<'_, Host>, _id: u32| Box::new(async move { Ok(100i32) }),
     )?;
 
     Ok(())
