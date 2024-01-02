@@ -11,7 +11,7 @@ pub struct SimRobot {
 
 impl SimRobot {
     fn new() -> Self {
-        pros::logger::ProsLogger::init().unwrap();
+        // pros::logger::ProsLogger::init().unwrap();
         pros::lcd::buttons::register(
             || {
                 println!("Left button pressed!");
@@ -24,7 +24,7 @@ impl SimRobot {
     }
 }
 
-impl Robot for SimRobot {
+impl SyncRobot for SimRobot {
     fn opcontrol(&mut self) -> pros::Result {
         let mut x_was_pressed = false;
         loop {
@@ -45,4 +45,4 @@ impl Robot for SimRobot {
         }
     }
 }
-robot!(SimRobot, SimRobot::new());
+sync_robot!(SimRobot, SimRobot::new());
