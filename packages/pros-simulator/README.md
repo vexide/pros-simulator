@@ -45,3 +45,70 @@ cargo run --example tui ./example/target/wasm32-unknown-unknown/debug/example.wa
 ```
 
 The simulator (and its TUI interface) support the use of breakpoints in robot code! Try opening this project in VS Code and pressing F5 to start debugging the example program.
+
+## Feature Reference
+
+### Overview
+
+- [x] **Concurrent multitasking**: Spawn tasks and manage them.
+- [x] **LLEMU**: Print messages to V5 LCD display.
+- [x] **Serial connection**: Print messages to debug terminal.
+- [x] **Mutexes**: Synchronize tasks.
+- [x] **Local storage**: Manage global variables that are specific to each task.
+- [x] **Timings**: Sleep program and get elapsed time.
+- [x] **Abort messages**: Get stack trace & error message on any panic or abort (including segfaults).
+- [x] **Controllers**: Control simulated robot using any SDL-compatible wired or bluetooth controller.
+- [ ] **Motors**: Simulate VEX Smart Motors
+- [ ] **Sensors**: Simulate V5-compatible sensors
+- [ ] **Physics**: Physics simulation and graphical representation of simulated robot
+
+### API
+
+See official PROS website for documentation and signatures. API is 1:1 except when mentioned otherwise. WebAssembly import module is `env`.
+
+#### LCD
+
+* `lcd_initialize`
+* `lcd_set_text`
+* `lcd_clear_line`
+* `lcd_clear`
+* `lcd_register_btnN_cb`
+
+#### Mutex
+
+* `mutex_create`
+* `mutex_delete`
+* `mutex_give`
+* `mutex_take`
+
+#### Thread locals
+
+See FreeRTOS documentation
+
+* `pvTaskGetThreadLocalStoragePointer`
+* `vTaskSetThreadLocalStoragePointer`
+
+#### Tasks
+
+* `task_get_current`
+* `task_create`
+
+#### Timing
+
+* `delay`
+* `millis`
+
+#### Errors/Debugging
+
+* `__errno()`
+* `sim_abort(msg: *const char) -> !` (Custom, simulator-only abort function with panic message)
+* `puts(msg: *const char)`
+
+#### Controller
+
+* `controller_get_analog`
+* `controller_get_digital`
+* `controller_get_digital_new_press`
+* `controller_is_connected`
+* `controller_get_battery_capacity`
+* `controller_get_battery_level` (Return value always equal to capacity)
