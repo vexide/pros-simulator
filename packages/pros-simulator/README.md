@@ -54,7 +54,7 @@ The simulator (and its TUI interface) support the use of breakpoints in robot co
 - [x] **LLEMU**: Print messages to V5 LCD display.
 - [x] **Serial connection**: Print messages to debug terminal.
 - [x] **Mutexes**: Synchronize tasks.
-- [x] **Local storage**: Manage global variables that are specific to each task.
+- [x] **Task-local storage**: Manage global variables that are specific to each task.
 - [x] **Timings**: Sleep program and get elapsed time.
 - [x] **Abort messages**: Get stack trace & error message on any panic or abort (including segfaults).
 - [x] **Controllers**: Control simulated robot using any SDL-compatible wired or bluetooth controller.
