@@ -33,6 +33,7 @@ wasmtime = { version = "16.0.0", features = [
     "addr2line",
 ], default-features = false }
 pros-simulator-interface = { version = "0.4", path = "../pros-simulator-interface" }
+futures-util = "0.3.30"
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }

@@ -46,7 +46,7 @@ async fn main() {
             move |event| {
                 write(stdout().lock(), &event).unwrap();
             },
-            Some(rx),
+            rx,
         )
         .await
         .unwrap();

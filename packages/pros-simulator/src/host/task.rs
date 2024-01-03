@@ -1,4 +1,10 @@
-use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc, task::Poll};
+use std::{
+    collections::{HashMap, HashSet},
+    future::Future,
+    pin::Pin,
+    sync::Arc,
+    task::Poll,
+};
 
 use anyhow::Context;
 use pros_simulator_interface::SimulatorEvent;
@@ -11,10 +17,17 @@ use wasmtime::{
 use super::{memory::SharedMemoryExt, thread_local::TaskStorage, Host, HostCtx, WasmAllocator};
 use crate::{api::configure_api, interface::SimulatorInterface};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskState {
+    /// Active and currently executing. This is the current task.
     Running,
-    Idle,
+    /// Idle and ready to resume
+    Ready,
+    /// Finished executing and will be removed from the task pool
     Finished,
+    // Blocked,
+    // Suspended,
+    Deleted,
 }
 
 pub const TASK_PRIORITIES: u32 = 16;
@@ -154,7 +167,8 @@ pub struct Task {
     allocator: WasmAllocator,
     pub indirect_call_table: Table,
     store: Arc<Mutex<Store<Host>>>,
-    is_finished: bool,
+    state: TaskState,
+    marked_for_delete: bool,
 }
 
 impl Task {
@@ -178,7 +192,8 @@ impl Task {
                 .unwrap(),
             instance,
             store: Arc::new(Mutex::new(store)),
-            is_finished: false,
+            state: TaskState::Ready,
+            marked_for_delete: false,
         }
     }
 
@@ -216,8 +231,12 @@ impl Task {
         }
     }
 
-    pub fn is_finished(&self) -> bool {
-        self.is_finished
+    pub fn state(&self) -> TaskState {
+        self.state
+    }
+
+    pub fn delete(&mut self) {
+        self.state = TaskState::Deleted;
     }
 }
 impl PartialEq for Task {
@@ -231,6 +250,7 @@ pub type TaskHandle = Arc<Mutex<Task>>;
 
 pub struct TaskPool {
     pool: HashMap<u32, TaskHandle>,
+    deleted_tasks: HashSet<u32>,
     newest_task_id: u32,
     current_task: Option<TaskHandle>,
     engine: Engine,
@@ -241,6 +261,7 @@ impl TaskPool {
     pub fn new(engine: Engine, shared_memory: SharedMemory) -> anyhow::Result<Self> {
         Ok(Self {
             pool: HashMap::new(),
+            deleted_tasks: HashSet::new(),
             newest_task_id: 0,
             current_task: None,
             engine,
@@ -383,33 +404,63 @@ impl TaskPool {
                 break Ok(());
             }
 
-            let task = tasks.current().clone();
-            let mut task = task.lock().await;
+            let mut task = tasks.current_lock().await;
             let id = task.id();
             let future = futures.entry(id).or_insert_with(|| Box::pin(task.start()));
-            drop((tasks, task));
+            drop(task);
+            drop(tasks);
 
             let result = futures::poll!(future);
+
+            let mut tasks = host.tasks_lock().await;
+            let mut task = tasks.current_lock().await;
+
+            if task.marked_for_delete {
+                task.state = TaskState::Deleted;
+            }
+
+            let mut should_delete = task.marked_for_delete;
             if let Poll::Ready(result) = result {
-                futures.remove(&id);
-                host.tasks_lock().await.pool.remove(&id);
+                should_delete = true;
+                task.state = TaskState::Finished;
                 result?;
+            }
+
+            drop(task);
+
+            if should_delete {
+                futures.remove(&id);
+                tasks.pool.remove(&id);
             }
         }
     }
 
-    pub async fn task_state(&self, task: Arc<Mutex<Task>>) -> Option<TaskState> {
-        if let Some(current_task) = &self.current_task {
-            if Arc::ptr_eq(current_task, &task) {
-                return Some(TaskState::Running);
-            }
+    pub async fn task_state(&self, task_id: u32) -> Option<TaskState> {
+        if self.deleted_tasks.contains(&task_id) {
+            return Some(TaskState::Deleted);
         }
-
-        let task = task.lock().await;
-        if task.is_finished() {
-            Some(TaskState::Finished)
+        if let Some(task) = self.pool.get(&task_id) {
+            let task = task.lock().await;
+            Some(task.state)
         } else {
-            Some(TaskState::Idle)
+            None
+        }
+    }
+
+    pub async fn delete_task(&mut self, task_id: u32) {
+        let task = self.pool.get(&task_id);
+        if let Some(task) = task {
+            let mut task = task.lock().await;
+            if task.state == TaskState::Running {
+                task.marked_for_delete = true;
+                futures_util::pending!();
+                unreachable!("Deleted task may not continue execution");
+            }
+
+            task.state = TaskState::Deleted;
+            drop(task);
+            self.pool.remove(&task_id).unwrap();
+            self.deleted_tasks.insert(task_id);
         }
     }
 }

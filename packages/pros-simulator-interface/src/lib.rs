@@ -34,11 +34,11 @@ pub struct ControllerState {
     pub analog: AnalogControllerState,
 }
 
-/// The current phase of robot code execution.
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
-pub enum RobotPhase {
-    Opcontrol,
-    Autonomous,
+pub struct CompetitionPhase {
+    pub autonomous: bool,
+    pub enabled: bool,
+    pub is_competition: bool,
 }
 
 /// An event that happens inside the simulator that the API consumer might want to know about.
@@ -81,6 +81,6 @@ pub enum SimulatorMessage {
     /// whether each button is being pressed, from left to right. This API technically supports
     /// pressing multiple buttons at once, but that won't ever happen on a real robot.
     LcdButtonsUpdate([bool; 3]), // {"LcdButtonsUpdate": [true, false, false]}
-    /// The robot has switched modes (opcontrol or autonomous). None = disabled.
-    PhaseChange(Option<RobotPhase>),
+    /// The robot has switched competition modes (opcontrol or autonomous or disabled).
+    PhaseChange(CompetitionPhase),
 }
