@@ -48,9 +48,8 @@ impl TaskOptions {
             let args = args.clone();
             Box::new(async move {
                 let entrypoint = {
-                    let tasks = caller.tasks();
-                    let tasks = tasks.lock().await;
-                    let current_task = tasks.current_lock().await;
+                    let task_handle = caller.current_task().await;
+                    let current_task = task_handle.lock().await;
                     current_task
                         .indirect_call_table
                         .get(&mut caller, task_start)
@@ -103,6 +102,32 @@ impl TaskOptions {
             entrypoint,
             store,
             name: None,
+        })
+    }
+
+    /// Create options for a task who's entrypoint is a global function from robot code.
+    pub fn new_global(
+        pool: &mut TaskPool,
+        host: &Host,
+        func_name: &'static str,
+    ) -> anyhow::Result<Self> {
+        Self::new_closure(pool, host, move |mut caller| {
+            Box::new(async move {
+                let instance = {
+                    let task_handle = caller.current_task().await;
+                    let this_task = task_handle.lock().await;
+                    this_task.instance
+                };
+
+                let func = instance.get_func(&mut caller, func_name).with_context(|| {
+                    format!("entrypoint missing: expected {func_name} to be defined")
+                })?;
+                let func = func
+                    .typed(&mut caller)
+                    .with_context(|| format!("invalid {func_name} signature: expected () -> ()"))?;
+
+                func.call_async(&mut caller, ()).await
+            })
         })
     }
 

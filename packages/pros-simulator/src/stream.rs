@@ -27,7 +27,7 @@ pub struct StreamedSimulatorEvent {
 pub fn start_simulator(
     robot_code: PathBuf,
     require_unpause: bool,
-    messages: Option<Receiver<SimulatorMessage>>,
+    messages: Receiver<SimulatorMessage>,
 ) -> impl Stream<Item = Result<StreamedSimulatorEvent>> {
     let (tx, rx) = mpsc::unbounded_channel();
 

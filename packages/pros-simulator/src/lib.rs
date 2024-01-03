@@ -30,7 +30,7 @@ mod system;
 pub async fn simulate(
     robot_code: &Path,
     interface: impl Into<SimulatorInterface>,
-    messages: Option<Receiver<SimulatorMessage>>,
+    messages: Receiver<SimulatorMessage>,
 ) -> Result<()> {
     let interface: SimulatorInterface = interface.into();
     tracing::info!("Initializing WASM runtime");
