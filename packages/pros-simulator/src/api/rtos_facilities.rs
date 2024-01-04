@@ -10,7 +10,7 @@
 //! * `mutex_give`
 //! * `mutex_take`
 //! * `task_create`
-//! * `task_delay` (not implemented)
+//! * `task_delay`
 //! * `task_delay_until` (not implemented)
 //! * `task_delete` (not implemented)
 //! * `task_get_by_name` (not implemented)
@@ -28,6 +28,11 @@
 //! * `task_set_priority` (not implemented)
 //! * `task_suspend` (not implemented)
 //!
+//! ### Undocumented
+//!
+//! * `rtos_suspend_all` (not implemented)
+//! * `rtos_resume_all` (not implemented)
+//!
 //! ### FreeRTOS reference
 //!
 //! * `pvTaskGetThreadLocalStoragePointer`
@@ -35,6 +40,7 @@
 
 use std::time::{Duration, Instant};
 
+use futures_util::Future;
 use pros_sys::TIMEOUT_MAX;
 use tokio::time::sleep;
 use wasmtime::{Caller, Linker, SharedMemory, Store};
@@ -128,9 +134,37 @@ pub fn configure_rtos_facilities_api(linker: &mut Linker<Host>) -> anyhow::Resul
         })
     })?;
 
-    linker.func_wrap1_async("env", "delay", |_caller: Caller<'_, Host>, millis: u32| {
+    fn task_delay(
+        _caller: Caller<'_, Host>,
+        millis: u32,
+    ) -> Box<dyn Future<Output = anyhow::Result<()>> + Send + '_> {
         Box::new(async move {
             sleep(Duration::from_millis(millis.into())).await;
+            anyhow::Ok(())
+        })
+    }
+
+    linker.func_wrap1_async("env", "delay", task_delay)?;
+    linker.func_wrap1_async("env", "task_delay", task_delay)?;
+
+    linker.func_wrap2_async(
+        "env",
+        "task_delay_until",
+        |caller: Caller<'_, Host>, prev_time_ptr: u32, delta_ms: u32| {
+            Box::new(async move {
+                assert_ne!(prev_time_ptr, 0);
+                assert!(delta_ms > 0);
+                todo!();
+                Ok(())
+            })
+        },
+    )?;
+
+    linker.func_wrap0_async("env", "rtos_suspend_all", |caller: Caller<'_, Host>| {
+        Box::new(async move {
+            let mut tasks: tokio::sync::MutexGuard<'_, crate::host::task::TaskPool> =
+                caller.tasks_lock().await;
+            tasks.suspend_all();
             Ok(())
         })
     })?;

@@ -94,7 +94,7 @@ impl Host {
     ) -> anyhow::Result<Self> {
         let lcd = Lcd::new(interface.clone());
         let mutexes = MutexPool::default();
-        let tasks = TaskPool::new(engine, memory.clone())?;
+        let tasks = TaskPool::new(engine, memory.clone(), interface.clone())?;
         let controllers = Controllers::new(None, None);
 
         Ok(Self {

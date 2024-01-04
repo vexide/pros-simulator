@@ -255,10 +255,16 @@ pub struct TaskPool {
     current_task: Option<TaskHandle>,
     engine: Engine,
     shared_memory: SharedMemory,
+    scheduler_suspended: u32,
+    interface: SimulatorInterface,
 }
 
 impl TaskPool {
-    pub fn new(engine: Engine, shared_memory: SharedMemory) -> anyhow::Result<Self> {
+    pub fn new(
+        engine: Engine,
+        shared_memory: SharedMemory,
+        interface: SimulatorInterface,
+    ) -> anyhow::Result<Self> {
         Ok(Self {
             pool: HashMap::new(),
             deleted_tasks: HashSet::new(),
@@ -266,6 +272,8 @@ impl TaskPool {
             current_task: None,
             engine,
             shared_memory,
+            scheduler_suspended: 0,
+            interface,
         })
     }
 
@@ -355,6 +363,11 @@ impl TaskPool {
             .await
     }
 
+    /// Prevent context switches from happening until `resume_all` is called.
+    pub fn suspend_all(&mut self) {
+        self.scheduler_suspended += 1;
+    }
+
     async fn highest_priority_task_ids(&self) -> Vec<u32> {
         let mut highest_priority = 0;
         let mut highest_priority_tasks = vec![];
@@ -379,6 +392,13 @@ impl TaskPool {
     /// chance to run before looping back around to the beginning. Only tasks with the highest
     /// priority will be considered.
     pub async fn cycle_tasks(&mut self) -> bool {
+        if self.scheduler_suspended != 0 {
+            if self.current_task.is_some() {
+                return true;
+            } else {
+                panic!("Scheduler is suspended and current task is missing");
+            }
+        }
         let task_candidates = self.highest_priority_task_ids().await;
         let current_task_id = if let Some(task) = &self.current_task {
             task.lock().await.id
@@ -426,9 +446,17 @@ impl TaskPool {
                 result?;
             }
 
-            drop(task);
-
             if should_delete {
+                if tasks.scheduler_suspended != 0 {
+                    // task called rtos_suspend_all and ended before calling rtos_resume_all
+                    tasks.interface.send(SimulatorEvent::Warning(format!(
+                        "Task `{}` (#{}) exited with scheduler in suspended state",
+                        &task.name, task.id,
+                    )));
+                }
+                drop(task);
+
+                tasks.scheduler_suspended = 0;
                 futures.remove(&id);
                 tasks.pool.remove(&id);
             }
