@@ -1,16 +1,12 @@
-use std::{path::Path, sync::mpsc::Receiver, time::Duration};
+use std::{path::Path, sync::mpsc::Receiver};
 
 use anyhow::Result;
 use host::{task::TaskPool, Host};
 use interface::SimulatorInterface;
 use pros_simulator_interface::{SimulatorEvent, SimulatorMessage};
-use tokio::time::sleep;
 use wasmtime::*;
 
-use crate::{
-    host::{lcd::Lcd, task::TaskOptions, HostCtx},
-    system::system_daemon::system_daemon_initialize,
-};
+use crate::system::system_daemon::system_daemon_initialize;
 
 mod api;
 pub mod host;
@@ -56,38 +52,7 @@ pub async fn simulate(
         module.clone(),
     )?;
 
-    {
-        system_daemon_initialize(&host, messages).await?;
-
-        interface.send(SimulatorEvent::RobotCodeStarting);
-        tracing::info!("Starting the init/opcontrol task... 🏁");
-
-        let task_opts = TaskOptions::new_closure(
-            &mut *host.tasks_lock().await,
-            &host,
-            move |mut caller: Caller<'_, Host>| {
-                Box::new(async move {
-                    let current_task = caller.tasks_lock().await.current();
-                    let instance = current_task.lock().await.instance;
-                    let initialize =
-                        instance.get_typed_func::<(), ()>(&mut caller, "initialize")?;
-                    let opcontrol = instance.get_typed_func::<(), ()>(&mut caller, "opcontrol")?;
-                    drop(current_task);
-
-                    initialize.call_async(&mut caller, ()).await?;
-                    opcontrol.call_async(&mut caller, ()).await?;
-
-                    Ok(())
-                })
-            },
-        )?
-        .name("User Operator Control (PROS)");
-
-        host.tasks_lock()
-            .await
-            .spawn(task_opts, &module, &interface)
-            .await?;
-    }
+    system_daemon_initialize(&host, messages).await?;
 
     TaskPool::run_to_completion(&host).await?;
     eprintln!("All tasks are finished. ✅");

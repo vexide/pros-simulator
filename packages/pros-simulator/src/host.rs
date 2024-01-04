@@ -9,11 +9,9 @@ use std::{alloc::Layout, sync::Arc, time::Instant};
 
 use async_trait::async_trait;
 use lcd::Lcd;
-use pros_simulator_interface::SimulatorEvent;
 use tokio::sync::{Mutex, MutexGuard};
 use wasmtime::{
     AsContext, AsContextMut, Caller, Engine, Instance, Module, SharedMemory, TypedFunc,
-    WasmBacktrace,
 };
 
 use self::{

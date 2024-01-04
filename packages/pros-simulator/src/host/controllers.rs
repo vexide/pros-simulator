@@ -1,6 +1,6 @@
 use std::mem;
 
-use pros_simulator_interface::{AnalogControllerState, ControllerState, DigitalControllerState};
+use pros_simulator_interface::{ControllerState, DigitalControllerState};
 use pros_sys::{
     misc::E_CONTROLLER_DIGITAL_R1, EINVAL, E_CONTROLLER_ANALOG_LEFT_X, E_CONTROLLER_ANALOG_LEFT_Y,
     E_CONTROLLER_ANALOG_RIGHT_X, E_CONTROLLER_ANALOG_RIGHT_Y, E_CONTROLLER_DIGITAL_A,
