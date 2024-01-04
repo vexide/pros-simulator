@@ -34,7 +34,7 @@ pub struct ControllerState {
     pub analog: AnalogControllerState,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
 pub struct CompetitionPhase {
     pub autonomous: bool,
     pub enabled: bool,

@@ -20,7 +20,7 @@ categories = [
 anyhow = "1.0.75"
 async-trait = "0.1.73"
 futures = { version = "0.3.28", features = ["async-await"] }
-pros-sys = { version = "0.3", features = ["no-link"] }
+pros-sys = { version = "0.4.1", features = ["no-link"] }
 slab = "0.4.9"
 tokio = { version = "1.32.0", features = ["macros", "sync", "time", "rt"] }
 tracing = "0.1.40"

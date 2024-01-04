@@ -4,6 +4,7 @@ use std::{
 };
 
 use pros_simulator_interface::{CompetitionPhase, SimulatorMessage};
+use pros_sys::{COMPETITION_AUTONOMOUS, COMPETITION_CONNECTED, COMPETITION_DISABLED};
 use tokio::{
     sync::Mutex,
     time::{interval, sleep},
@@ -51,7 +52,6 @@ async fn spawn_user_code(
 async fn do_background_operations(
     caller: &mut Caller<'_, Host>,
     messages: &mut Receiver<SimulatorMessage>,
-    phase: &mut Option<CompetitionPhase>,
 ) -> anyhow::Result<()> {
     while let Ok(message) = messages.try_recv() {
         match message {
@@ -69,7 +69,8 @@ async fn do_background_operations(
                 Lcd::press(&caller.lcd(), &mut *caller, cb_table, btns).await?;
             }
             SimulatorMessage::PhaseChange(new_phase) => {
-                *phase = Some(new_phase);
+                let mut phase = caller.competition_phase_lock().await;
+                *phase = new_phase;
             }
         }
     }
@@ -81,7 +82,7 @@ async fn system_daemon_task(
     mut caller: Caller<'_, Host>,
     mut messages: Receiver<SimulatorMessage>,
 ) -> anyhow::Result<()> {
-    let mut last_phase = None::<CompetitionPhase>;
+    let mut status = None::<CompetitionPhase>;
     // let mut state = None;
 
     let host = caller.data().clone();
@@ -95,42 +96,39 @@ async fn system_daemon_task(
     };
 
     let mut delay = interval(Duration::from_millis(2));
-    let mut phase = None;
 
     // wait for initialize to finish
     while competition_task.lock().await.state() != TaskState::Finished {
-        do_background_operations(&mut caller, &mut messages, &mut phase).await?;
+        do_background_operations(&mut caller, &mut messages).await?;
         sleep(Duration::from_millis(2)).await;
     }
 
     loop {
-        do_background_operations(&mut caller, &mut messages, &mut phase).await?;
+        do_background_operations(&mut caller, &mut messages).await?;
 
-        if let Some(phase) = phase {
-            if let Some(last_phase) = last_phase {
-                if last_phase == phase {
-                    continue;
-                }
-                if !last_phase.enabled && !phase.enabled {
-                    // Don't restart the disabled task even if other bits have changed (e.g. auton bit)
-                    continue;
-                }
+        let new_status = *caller.competition_phase_lock().await;
+
+        if status.is_none() || status != Some(new_status) {
+            let old_status = status.unwrap_or_default();
+            status = Some(new_status);
+
+            if !new_status.enabled && !old_status.enabled {
+                // Don't restart the disabled task even if other bits have changed (e.g. auton bit)
+                continue;
             }
 
             // competition initialize only runs when disabled and competition connection
             // status has changed to true
-            let state = if last_phase.map(|p| !p.is_competition).unwrap_or(true)
-                && phase.is_competition
-                && !phase.enabled
-            {
-                UserTask::CompInit
-            } else if !phase.enabled {
-                UserTask::Disabled
-            } else if phase.autonomous {
-                UserTask::Auton
-            } else {
-                UserTask::Opcontrol
-            };
+            let state =
+                if !old_status.is_competition && new_status.is_competition && !new_status.enabled {
+                    UserTask::CompInit
+                } else if !new_status.enabled {
+                    UserTask::Disabled
+                } else if new_status.autonomous {
+                    UserTask::Auton
+                } else {
+                    UserTask::Opcontrol
+                };
 
             let task = competition_task.lock().await;
             if task.state() == TaskState::Ready {
@@ -139,8 +137,6 @@ async fn system_daemon_task(
                 tasks.delete_task(id).await;
             }
             drop(task);
-
-            last_phase = Some(phase);
 
             competition_task = spawn_user_code(&mut caller, &host, state).await?;
         }
@@ -165,4 +161,28 @@ pub async fn system_daemon_initialize(
         .await?;
 
     Ok(())
+}
+
+pub trait CompetitionPhaseExt {
+    fn as_bits(&self) -> u8;
+}
+
+impl CompetitionPhaseExt for CompetitionPhase {
+    fn as_bits(&self) -> u8 {
+        let mut bits = 0;
+
+        if self.autonomous {
+            bits |= COMPETITION_AUTONOMOUS;
+        }
+
+        if !self.enabled {
+            bits |= COMPETITION_DISABLED;
+        }
+
+        if self.is_competition {
+            bits |= COMPETITION_CONNECTED;
+        }
+
+        bits
+    }
 }

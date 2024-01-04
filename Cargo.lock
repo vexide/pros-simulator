@@ -1053,9 +1053,9 @@ dependencies = [
 
 [[package]]
 name = "pros-sys"
-version = "0.3.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18fe552afce0ac72c64da580dfbde44887b0e3abfeaa72a37e5c017063a8ede9"
+checksum = "59db848fe98ed213b8518e1993c5ca682384e96f1cf54e0202f102c3e9e8c154"
 dependencies = [
  "cfg-if",
 ]

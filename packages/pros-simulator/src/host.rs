@@ -9,6 +9,7 @@ use std::{alloc::Layout, sync::Arc, time::Instant};
 
 use async_trait::async_trait;
 use lcd::Lcd;
+use pros_simulator_interface::CompetitionPhase;
 use tokio::sync::{Mutex, MutexGuard};
 use wasmtime::{
     AsContext, AsContextMut, Caller, Engine, Instance, Module, SharedMemory, TypedFunc,
@@ -80,6 +81,7 @@ pub struct Host {
     mutexes: Arc<Mutex<MutexPool>>,
     tasks: Arc<Mutex<TaskPool>>,
     controllers: Arc<Mutex<Controllers>>,
+    competition_phase: Arc<Mutex<CompetitionPhase>>,
     start_time: Instant,
 }
 
@@ -103,6 +105,7 @@ impl Host {
             mutexes: Arc::new(Mutex::new(mutexes)),
             tasks: Arc::new(Mutex::new(tasks)),
             controllers: Arc::new(Mutex::new(controllers)),
+            competition_phase: Default::default(),
             start_time: Instant::now(),
         })
     }
@@ -123,6 +126,8 @@ pub trait HostCtx {
     async fn current_task(&self) -> TaskHandle;
     fn controllers(&self) -> Arc<Mutex<Controllers>>;
     async fn controllers_lock(&self) -> MutexGuard<'_, Controllers>;
+    fn competition_phase(&self) -> Arc<Mutex<CompetitionPhase>>;
+    async fn competition_phase_lock(&self) -> MutexGuard<'_, CompetitionPhase>;
 }
 
 #[async_trait]
@@ -177,6 +182,14 @@ impl HostCtx for Host {
 
     async fn controllers_lock(&self) -> MutexGuard<'_, Controllers> {
         self.controllers.lock().await
+    }
+
+    fn competition_phase(&self) -> Arc<Mutex<CompetitionPhase>> {
+        self.competition_phase.clone()
+    }
+
+    async fn competition_phase_lock(&self) -> MutexGuard<'_, CompetitionPhase> {
+        self.competition_phase.lock().await
     }
 }
 
@@ -235,6 +248,14 @@ where
 
     async fn controllers_lock(&self) -> MutexGuard<'_, Controllers> {
         self.as_context().data().controllers_lock().await
+    }
+
+    fn competition_phase(&self) -> Arc<Mutex<CompetitionPhase>> {
+        self.as_context().data().competition_phase()
+    }
+
+    async fn competition_phase_lock(&self) -> MutexGuard<'_, CompetitionPhase> {
+        self.as_context().data().competition_phase_lock().await
     }
 }
 
