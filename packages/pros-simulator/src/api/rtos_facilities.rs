@@ -36,7 +36,10 @@
 //! * `vTaskSetThreadLocalStoragePointer`
 //! * `xTaskAbortDelay` (not implemented)
 
-use std::time::{Duration, Instant};
+use std::{
+    mem::size_of,
+    time::{Duration, Instant},
+};
 
 use futures_util::Future;
 use pros_sys::TIMEOUT_MAX;
@@ -162,7 +165,22 @@ pub fn configure_rtos_facilities_api(linker: &mut Linker<Host>) -> anyhow::Resul
             Box::new(async move {
                 assert_ne!(prev_time_ptr, 0);
                 assert!(delta_ms > 0);
-                todo!();
+
+                let epoch = caller.start_time();
+
+                let memory = caller.memory();
+                let u32_bits = memory.read_relaxed(prev_time_ptr as usize, size_of::<u32>())?;
+                let prev_time = u32::from_le_bytes(u32_bits.try_into().unwrap());
+
+                let end = epoch
+                    + Duration::from_millis(prev_time.into())
+                    + Duration::from_millis(delta_ms.into());
+
+                TaskPool::yield_now().await;
+                while Instant::now() < end {
+                    TaskPool::yield_now().await;
+                }
+
                 Ok(())
             })
         },
@@ -179,8 +197,8 @@ pub fn configure_rtos_facilities_api(linker: &mut Linker<Host>) -> anyhow::Resul
     linker.func_wrap0_async("env", "rtos_resume_all", |caller: Caller<'_, Host>| {
         Box::new(async move {
             let mut tasks = caller.tasks_lock().await;
-            tasks.resume_all().await?;
-            Ok(())
+            let res = tasks.resume_all().await?;
+            Ok(i32::from(res))
         })
     })?;
 

@@ -218,8 +218,6 @@ dependencies = [
 [[package]]
 name = "pros"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4440eeb2246a33c32a7a05586de3f78f5e39c82d5908ddded250579b4897ab17"
 dependencies = [
  "async-task",
  "async-trait",
@@ -237,9 +235,7 @@ dependencies = [
 
 [[package]]
 name = "pros-sys"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5deab65a5ecf10b5a7c277f4619b28ac43b1dd3dccdf682d7258f81304bfbb4e"
+version = "0.4.1"
 dependencies = [
  "cfg-if",
 ]

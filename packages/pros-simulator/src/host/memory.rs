@@ -1,7 +1,8 @@
 use anyhow::Context;
+use snafu::Snafu;
 use wasmtime::SharedMemory;
 
-#[derive(Debug)]
+#[derive(Debug, Snafu)]
 pub struct OutOfBoundsError;
 
 pub trait SharedMemoryExt {
