@@ -7,9 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Implemented Controller apis
+- Implemented `competition_*` apis
+- Implemented `task_delay`, `task_delay_until`, `task_get_name`, `task_delete`
+- Implemented `rtos_[suspend/remove]_all`
+- Implemented `exit`
+- New sim-specific API: `sim_log_backtrace`
+- Added new Competition Phase simulator message (`SimulatorMessage::PhaseChange`)
+
 ### Changed
 
 - Added feature reference documentation
+- Phase entrypoints (`opcontrol`, `autonomous`, etc.) will not run until the first competition phase change message has been sent (**breaking change**)
 
 ## [0.4.0] - 2023-12-20
 
