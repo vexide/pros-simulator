@@ -11,12 +11,12 @@
 //! * `mutex_take`
 //! * `task_create`
 //! * `task_delay`
-//! * `task_delay_until` (not implemented)
-//! * `task_delete` (not implemented)
+//! * `task_delay_until`
+//! * `task_delete`
 //! * `task_get_by_name` (not implemented)
 //! * `task_get_count` (not implemented)
 //! * `task_get_current` (not implemented)
-//! * `task_get_name` (not implemented)
+//! * `task_get_name`
 //! * `task_get_priority` (not implemented)
 //! * `task_get_state` (not implemented)
 //! * `task_notify` (not implemented)
@@ -37,23 +37,22 @@
 //! * `xTaskAbortDelay` (not implemented)
 
 use std::{
+    alloc::Layout,
+    ffi::CString,
     mem::size_of,
     time::{Duration, Instant},
 };
 
 use futures_util::Future;
+use pros_simulator_interface::SimulatorEvent;
 use pros_sys::TIMEOUT_MAX;
-use tokio::time::sleep;
-use wasmtime::{Caller, Linker, SharedMemory, Store};
+use wasmtime::{Caller, Linker};
 
-use crate::{
-    host::{
-        memory::SharedMemoryExt,
-        task::{TaskOptions, TaskPool},
-        thread_local::GetTaskStorage,
-        Host, HostCtx, ResultExt,
-    },
-    system::system_daemon::CompetitionPhaseExt,
+use crate::host::{
+    memory::SharedMemoryExt,
+    task::{TaskOptions, TaskPool},
+    thread_local::GetTaskStorage,
+    Host, HostCtx,
 };
 
 pub fn configure_rtos_facilities_api(linker: &mut Linker<Host>) -> anyhow::Result<()> {
@@ -231,6 +230,50 @@ pub fn configure_rtos_facilities_api(linker: &mut Linker<Host>) -> anyhow::Resul
 
                 let task = task.lock().await;
                 Ok(task.id())
+            })
+        },
+    )?;
+
+    linker.func_wrap1_async(
+        "env",
+        "task_delete",
+        |caller: Caller<'_, Host>, task_id: u32| {
+            Box::new(async move {
+                let mut tasks = caller.tasks_lock().await;
+                tasks.delete_task(task_id).await;
+                Ok(())
+            })
+        },
+    )?;
+
+    linker.func_wrap1_async(
+        "env",
+        "task_get_name",
+        |mut caller: Caller<'_, Host>, task_id: u32| {
+            Box::new(async move {
+                let tasks = caller.tasks_lock().await;
+                let task = tasks.by_id(task_id);
+                drop(tasks);
+
+                if let Some(task) = task {
+                    let task = task.lock().await;
+                    let name = task.name();
+                    let c_name = CString::new(name).unwrap();
+                    let name_bytes = c_name.as_bytes_with_nul();
+                    drop(task);
+
+                    let current_task_handle = caller.current_task().await;
+                    let current_task = current_task_handle.lock().await;
+                    let allocator = current_task.allocator();
+                    let ptr = allocator
+                        .memalign(&mut caller, Layout::for_value(name_bytes))
+                        .await;
+                    caller.memory().write_relaxed(ptr as usize, name_bytes)?;
+
+                    Ok(ptr)
+                } else {
+                    Ok(0)
+                }
             })
         },
     )?;

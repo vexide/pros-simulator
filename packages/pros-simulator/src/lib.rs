@@ -55,7 +55,6 @@ pub async fn simulate(
     system_daemon_initialize(&host, messages).await?;
 
     TaskPool::run_to_completion(&host).await?;
-    eprintln!("All tasks are finished. ✅");
     interface.send(SimulatorEvent::RobotCodeFinished);
 
     Ok(())

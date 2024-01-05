@@ -16,12 +16,7 @@ pub struct SimRobot {
 impl SimRobot {
     fn new() -> Self {
         // pros::logger::ProsLogger::init().unwrap();
-        pros::task::spawn(|| unsafe {
-            rtos_suspend_all();
-        });
-        Self {
-            controller: Controller::Master,
-        }
+        panic!("uh oh");
     }
 }
 

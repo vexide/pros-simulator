@@ -6,6 +6,9 @@
 //! * `__errno`
 //! * `sim_abort`
 //!   This is a simulator-specific function that will print the given message to stderr and exit.
+//! * `sim_log_backtrace`
+//!   This is a simulator-specific function that will print a backtrace to the debug terminal.
+//! * `exit`
 //! * `puts`
 
 use std::process::exit;
@@ -14,7 +17,7 @@ use pros_simulator_interface::SimulatorEvent;
 use wasmtime::{Caller, Linker, SharedMemory, Store, WasmBacktrace};
 
 use crate::{
-    host::{memory::SharedMemoryExt, Host, HostCtx, ResultExt},
+    host::{memory::SharedMemoryExt, task::TaskPool, Host, HostCtx, ResultExt},
     system::system_daemon::CompetitionPhaseExt,
 };
 
@@ -44,6 +47,31 @@ pub fn configure_generic_io_api(linker: &mut Linker<Host>) -> anyhow::Result<()>
                 .interface()
                 .send(SimulatorEvent::ConsoleMessage(console_message));
             u32::from(true)
+        })
+    })?;
+
+    linker.func_wrap1_async("env", "exit", |caller: Caller<'_, Host>, code: i32| {
+        Box::new(async move {
+            if code != 0 {
+                caller
+                    .interface()
+                    .send(SimulatorEvent::ConsoleMessage(format!("Error {code}\n")));
+            }
+            {
+                let mut tasks = caller.tasks_lock().await;
+                tasks.start_shutdown();
+            }
+            TaskPool::yield_now().await;
+            unreachable!("exit")
+        })
+    })?;
+
+    linker.func_wrap0_async("env", "sim_log_backtrace", |caller: Caller<'_, Host>| {
+        Box::new(async move {
+            let backtrace = WasmBacktrace::force_capture(&caller);
+            caller
+                .interface()
+                .send(SimulatorEvent::ConsoleMessage(format!("{backtrace}\n",)));
         })
     })?;
 

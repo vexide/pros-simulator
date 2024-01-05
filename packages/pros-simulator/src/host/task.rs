@@ -235,8 +235,12 @@ impl Task {
         self.state
     }
 
-    pub fn delete(&mut self) {
-        self.state = TaskState::Deleted;
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn allocator(&self) -> WasmAllocator {
+        self.allocator.clone()
     }
 }
 impl PartialEq for Task {
@@ -257,6 +261,7 @@ pub struct TaskPool {
     shared_memory: SharedMemory,
     scheduler_suspended: u32,
     yield_pending: bool,
+    shutdown_pending: bool,
     interface: SimulatorInterface,
 }
 
@@ -275,6 +280,7 @@ impl TaskPool {
             shared_memory,
             scheduler_suspended: 0,
             yield_pending: false,
+            shutdown_pending: false,
             interface,
         })
     }
@@ -460,8 +466,18 @@ impl TaskPool {
 
             let result = futures::poll!(future);
 
-            let mut tasks = host.tasks_lock().await;
-            let mut task = tasks.current_lock().await;
+            let tasks = host.tasks();
+            let mut tasks = tasks
+                .try_lock()
+                .expect("attempt to yield while task mutex is locked");
+            let task = tasks.current();
+            let mut task = task
+                .try_lock()
+                .expect("attempt to yield while current task is locked");
+
+            if tasks.shutdown_pending {
+                break Ok(());
+            }
 
             if let Poll::Ready(result) = result {
                 task.marked_for_delete = true;
@@ -515,6 +531,10 @@ impl TaskPool {
             self.pool.remove(&task_id).unwrap();
             self.deleted_tasks.insert(task_id);
         }
+    }
+
+    pub fn start_shutdown(&mut self) {
+        self.shutdown_pending = true;
     }
 }
 

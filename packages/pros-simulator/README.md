@@ -110,13 +110,13 @@ See PROS docs for signatures and documentation. API is 1:1 except where mentione
   - [x] `mutex_give`
   - [x] `mutex_take`
   - [x] `task_create`
-  - [ ] `task_delay`
-  - [ ] `task_delay_until`
-  - [ ] `task_delete`
+  - [x] `task_delay`
+  - [x] `task_delay_until`
+  - [x] `task_delete`
   - [ ] `task_get_by_name`
   - [ ] `task_get_count`
   - [ ] `task_get_current`
-  - [ ] `task_get_name`
+  - [x] `task_get_name`
   - [ ] `task_get_priority`
   - [ ] `task_get_state`
   - [ ] `task_notify`
@@ -127,6 +127,11 @@ See PROS docs for signatures and documentation. API is 1:1 except where mentione
   - [ ] `task_resume`
   - [ ] `task_set_priority`
   - [ ] `task_suspend`
+  - [x] `rtos_suspend_all`
+  - [x] `rtos_resume_all`
+  - [x] `pvTaskGetThreadLocalStoragePointer`
+  - [x] `vTaskSetThreadLocalStoragePointer`
+  - [ ] `xTaskAbortDelay`
 - [x] Generic I/O API
 
     Undocumented/internal PROS functions that are required to support
@@ -134,4 +139,6 @@ See PROS docs for signatures and documentation. API is 1:1 except where mentione
 
   - [x] `_errno`: Returns a mutable pointer to the errno value of the current task.
   - [x] `sim_abort(*const char) -> !`: Simulator-only API for aborting with an error message.
+  - [x] `sim_log_backtrace() -> ()`: Simulator-specific function that will print a backtrace to the debug terminal.
   - [x] `puts`: Write to the debug terminal (`pros terminal` command from official PROS CLI)
+  - [x] `exit`: Cleanly shutdown

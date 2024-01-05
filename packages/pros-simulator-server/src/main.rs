@@ -53,4 +53,5 @@ async fn main() {
     } else {
         panic!("No connection method: append the --stdio flag to use stdin/stdout.")
     }
+    exit(0);
 }
