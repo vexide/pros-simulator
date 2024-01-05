@@ -1,6 +1,6 @@
 [package]
 name = "pros-simulator"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 authors = ["doinkythederp <doinkythederp@icloud.com>", "pros-rs"]
 license = "MIT"
@@ -32,7 +32,7 @@ wasmtime = { version = "16.0.0", features = [
     "coredump",
     "addr2line",
 ], default-features = false }
-pros-simulator-interface = { version = "0.4", path = "../pros-simulator-interface" }
+pros-simulator-interface = { version = "0.5", path = "../pros-simulator-interface" }
 futures-util = "0.3.30"
 snafu = "0.8.0"
 

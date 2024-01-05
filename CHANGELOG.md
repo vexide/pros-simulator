@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2024-01-04
+
 ### Added
 
 - Implemented Controller apis
@@ -59,7 +61,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The Simulator Server to allow for easier integration into other apps.
 
-[unreleased]: https://github.com/pros-rs/pros-simulator/compare/server-v0.4.0...HEAD
+[unreleased]: https://github.com/pros-rs/pros-simulator/compare/server-v0.5.0...HEAD
+[0.5.0]: https://github.com/pros-rs/pros-simulator/releases/tag/v0.5.0
 [0.4.0]: https://github.com/pros-rs/pros-simulator/releases/tag/v0.4.0
 [0.3.0]: https://github.com/pros-rs/pros-simulator/releases/tag/v0.3.0
 [server 0.1.1]: https://github.com/pros-rs/pros-simulator/releases/tag/server-v0.1.1
