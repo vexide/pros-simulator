@@ -1,17 +1,6 @@
-use std::{
-    process::exit,
-    time::{Duration, Instant},
-};
+use wasmtime::{Linker, SharedMemory, Store};
 
-use pros_simulator_interface::SimulatorEvent;
-use pros_sys::TIMEOUT_MAX;
-use tokio::time::sleep;
-use wasmtime::{Caller, Linker, SharedMemory, Store, WasmBacktrace};
-
-use crate::host::{
-    memory::SharedMemoryExt, task::TaskOptions, thread_local::GetTaskStorage, Host, HostCtx,
-    ResultExt,
-};
+use crate::host::Host;
 
 mod generic_io;
 mod llemu;

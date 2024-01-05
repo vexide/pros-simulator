@@ -44,7 +44,6 @@ use std::{
 };
 
 use futures_util::Future;
-use pros_simulator_interface::SimulatorEvent;
 use pros_sys::TIMEOUT_MAX;
 use wasmtime::{Caller, Linker};
 

@@ -14,12 +14,9 @@
 use std::process::exit;
 
 use pros_simulator_interface::SimulatorEvent;
-use wasmtime::{Caller, Linker, SharedMemory, Store, WasmBacktrace};
+use wasmtime::{Caller, Linker, WasmBacktrace};
 
-use crate::{
-    host::{memory::SharedMemoryExt, task::TaskPool, Host, HostCtx, ResultExt},
-    system::system_daemon::CompetitionPhaseExt,
-};
+use crate::host::{memory::SharedMemoryExt, task::TaskPool, Host, HostCtx};
 
 pub fn configure_generic_io_api(linker: &mut Linker<Host>) -> anyhow::Result<()> {
     linker.func_wrap0_async("env", "__errno", |mut caller: Caller<'_, Host>| {

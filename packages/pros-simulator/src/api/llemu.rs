@@ -16,12 +16,9 @@
 //! * `lcd_set_background_color` (not implemented)
 //! * `lcd_set_text_color` (not implemented)
 
-use wasmtime::{Caller, Linker, SharedMemory, Store};
+use wasmtime::{Caller, Linker};
 
-use crate::{
-    host::{memory::SharedMemoryExt, Host, HostCtx, ResultExt},
-    system::system_daemon::CompetitionPhaseExt,
-};
+use crate::host::{memory::SharedMemoryExt, Host, HostCtx, ResultExt};
 
 pub fn configure_llemu_api(linker: &mut Linker<Host>) -> anyhow::Result<()> {
     linker.func_wrap0_async("env", "lcd_initialize", |caller: Caller<'_, Host>| {

@@ -23,7 +23,7 @@
 //! * `controller_set_text` (not implemented)
 //! * `usd_is_installed` (not implemented)
 
-use wasmtime::{Caller, Linker, SharedMemory, Store};
+use wasmtime::{Caller, Linker};
 
 use crate::{
     host::{Host, HostCtx, ResultExt},
