@@ -217,9 +217,9 @@ dependencies = [
 
 [[package]]
 name = "pros"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8edea4b1181f1d1d2760d7ff1cc0e53b8d9826dda71888fed0c813325dd802bd"
+checksum = "4440eeb2246a33c32a7a05586de3f78f5e39c82d5908ddded250579b4897ab17"
 dependencies = [
  "async-task",
  "async-trait",

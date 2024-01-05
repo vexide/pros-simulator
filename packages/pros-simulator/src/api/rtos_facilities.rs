@@ -28,15 +28,13 @@
 //! * `task_set_priority` (not implemented)
 //! * `task_suspend` (not implemented)
 //!
-//! ### Undocumented
+//! ### FreeRTOS
 //!
-//! * `rtos_suspend_all` (not implemented)
-//! * `rtos_resume_all` (not implemented)
-//!
-//! ### FreeRTOS reference
-//!
+//! * `rtos_suspend_all`
+//! * `rtos_resume_all`
 //! * `pvTaskGetThreadLocalStoragePointer`
 //! * `vTaskSetThreadLocalStoragePointer`
+//! * `xTaskAbortDelay` (not implemented)
 
 use std::time::{Duration, Instant};
 
@@ -47,8 +45,10 @@ use wasmtime::{Caller, Linker, SharedMemory, Store};
 
 use crate::{
     host::{
-        memory::SharedMemoryExt, task::TaskOptions, thread_local::GetTaskStorage, Host, HostCtx,
-        ResultExt,
+        memory::SharedMemoryExt,
+        task::{TaskOptions, TaskPool},
+        thread_local::GetTaskStorage,
+        Host, HostCtx, ResultExt,
     },
     system::system_daemon::CompetitionPhaseExt,
 };
@@ -139,8 +139,16 @@ pub fn configure_rtos_facilities_api(linker: &mut Linker<Host>) -> anyhow::Resul
         millis: u32,
     ) -> Box<dyn Future<Output = anyhow::Result<()>> + Send + '_> {
         Box::new(async move {
-            sleep(Duration::from_millis(millis.into())).await;
-            anyhow::Ok(())
+            if millis > 0 {
+                let end = Instant::now() + Duration::from_millis(millis.into());
+                while Instant::now() < end {
+                    TaskPool::yield_now().await;
+                }
+            } else {
+                TaskPool::yield_now().await;
+            }
+
+            Ok(())
         })
     }
 
@@ -162,9 +170,16 @@ pub fn configure_rtos_facilities_api(linker: &mut Linker<Host>) -> anyhow::Resul
 
     linker.func_wrap0_async("env", "rtos_suspend_all", |caller: Caller<'_, Host>| {
         Box::new(async move {
-            let mut tasks: tokio::sync::MutexGuard<'_, crate::host::task::TaskPool> =
-                caller.tasks_lock().await;
+            let mut tasks = caller.tasks_lock().await;
             tasks.suspend_all();
+            Ok(())
+        })
+    })?;
+
+    linker.func_wrap0_async("env", "rtos_resume_all", |caller: Caller<'_, Host>| {
+        Box::new(async move {
+            let mut tasks = caller.tasks_lock().await;
+            tasks.resume_all().await?;
             Ok(())
         })
     })?;

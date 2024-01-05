@@ -6,7 +6,7 @@ use std::{
     task::Poll,
 };
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use pros_simulator_interface::SimulatorEvent;
 use tokio::sync::{Mutex, MutexGuard};
 use wasmtime::{
@@ -25,7 +25,7 @@ pub enum TaskState {
     Ready,
     /// Finished executing and will be removed from the task pool
     Finished,
-    // Blocked,
+    Blocked,
     // Suspended,
     Deleted,
 }
@@ -256,6 +256,7 @@ pub struct TaskPool {
     engine: Engine,
     shared_memory: SharedMemory,
     scheduler_suspended: u32,
+    yield_pending: bool,
     interface: SimulatorInterface,
 }
 
@@ -273,6 +274,7 @@ impl TaskPool {
             engine,
             shared_memory,
             scheduler_suspended: 0,
+            yield_pending: false,
             interface,
         })
     }
@@ -331,7 +333,7 @@ impl TaskPool {
 
         let mut task = Task::new(
             id,
-            name.unwrap_or_else(|| format!("Task {id}")),
+            name.unwrap_or_else(|| format!("task {id}")),
             store,
             instance,
             entrypoint,
@@ -363,9 +365,32 @@ impl TaskPool {
             .await
     }
 
+    #[inline]
+    pub async fn yield_now() {
+        futures_util::pending!();
+    }
+
     /// Prevent context switches from happening until `resume_all` is called.
     pub fn suspend_all(&mut self) {
         self.scheduler_suspended += 1;
+    }
+
+    /// Resumes the scheduler, causing a yield if one is pending
+    ///
+    /// Returns whether resuming the scheduler caused a yield.
+    pub async fn resume_all(&mut self) -> anyhow::Result<bool> {
+        if self.scheduler_suspended == 0 {
+            bail!("rtos_resume_all called without a matching rtos_suspend_all");
+        }
+
+        self.scheduler_suspended -= 1;
+
+        if self.yield_pending && self.scheduler_suspended == 0 {
+            Self::yield_now().await;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
     async fn highest_priority_task_ids(&self) -> Vec<u32> {
@@ -394,11 +419,14 @@ impl TaskPool {
     pub async fn cycle_tasks(&mut self) -> bool {
         if self.scheduler_suspended != 0 {
             if self.current_task.is_some() {
+                self.yield_pending = true;
                 return true;
             } else {
                 panic!("Scheduler is suspended and current task is missing");
             }
         }
+        self.yield_pending = false;
+
         let task_candidates = self.highest_priority_task_ids().await;
         let current_task_id = if let Some(task) = &self.current_task {
             task.lock().await.id
@@ -435,18 +463,15 @@ impl TaskPool {
             let mut tasks = host.tasks_lock().await;
             let mut task = tasks.current_lock().await;
 
-            if task.marked_for_delete {
+            if let Poll::Ready(result) = result {
+                task.marked_for_delete = true;
+                task.state = TaskState::Finished;
+                result?;
+            } else if task.marked_for_delete {
                 task.state = TaskState::Deleted;
             }
 
-            let mut should_delete = task.marked_for_delete;
-            if let Poll::Ready(result) = result {
-                should_delete = true;
-                task.state = TaskState::Finished;
-                result?;
-            }
-
-            if should_delete {
+            if task.marked_for_delete {
                 if tasks.scheduler_suspended != 0 {
                     // task called rtos_suspend_all and ended before calling rtos_resume_all
                     tasks.interface.send(SimulatorEvent::Warning(format!(
@@ -481,7 +506,7 @@ impl TaskPool {
             let mut task = task.lock().await;
             if task.state == TaskState::Running {
                 task.marked_for_delete = true;
-                futures_util::pending!();
+                Self::yield_now().await;
                 unreachable!("Deleted task may not continue execution");
             }
 
