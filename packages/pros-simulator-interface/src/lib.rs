@@ -1,8 +1,15 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 pub const LCD_HEIGHT: u32 = 8;
 pub const LCD_WIDTH: u32 = 40;
 pub type LcdLines = [String; LCD_HEIGHT as usize];
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+pub enum SmartDeviceSpec {
+    Motor,
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct DigitalControllerState {
@@ -83,4 +90,7 @@ pub enum SimulatorMessage {
     LcdButtonsUpdate([bool; 3]), // {"LcdButtonsUpdate": [true, false, false]}
     /// The robot has switched competition modes (opcontrol or autonomous or disabled).
     PhaseChange(CompetitionPhase),
+
+    /// The robot's smart ports have been updated. Map of port numbers to device specs.
+    PortsUpdate(HashMap<u32, SmartDeviceSpec>),
 }

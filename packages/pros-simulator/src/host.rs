@@ -2,6 +2,7 @@ pub mod controllers;
 pub mod lcd;
 pub mod memory;
 pub mod multitasking;
+pub mod smart_device;
 pub mod task;
 pub mod thread_local;
 
