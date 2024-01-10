@@ -1,16 +1,37 @@
 use std::collections::HashMap;
 
-use pros_simulator_interface::SmartDeviceSpec;
+use pros_simulator_interface::{
+    MotorBrakeMode, MotorEncoderUnits, SimulatorEvent, SmartDeviceSpec,
+};
+use snafu::{OptionExt, Snafu};
 
-#[derive(Debug, Default)]
+use crate::interface::SimulatorInterface;
+
+#[derive(Debug, Snafu)]
+#[snafu(display("Smart port {port} is not configured"))]
+pub struct PortNotConfiguredError {
+    pub port: u32,
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(display("Smart port {port} is configured as a {actual:?}, not a {expected:?}"))]
+pub struct IncorrectDeviceTypeError {
+    pub port: u32,
+    pub expected: SmartDeviceSpec,
+    pub actual: SmartDeviceSpec,
+}
+
+#[derive(Debug)]
 pub struct SmartPorts {
     devices: HashMap<u32, SmartDevice>,
+    interface: SimulatorInterface,
 }
 
 impl SmartPorts {
-    pub fn new() -> Self {
+    pub fn new(interface: SimulatorInterface) -> Self {
         Self {
             devices: HashMap::new(),
+            interface,
         }
     }
 
@@ -18,17 +39,24 @@ impl SmartPorts {
         for (port, spec) in specs.iter() {
             let current = self.devices.get(port);
             if current.map(SmartDeviceSpec::from) != Some(*spec) {
-                self.devices.insert(*port, SmartDevice::from(*spec));
+                self.devices.insert(
+                    *port,
+                    SmartDevice::new(*spec, *port, self.interface.clone()),
+                );
             }
         }
     }
 
-    pub fn get(&self, port: u32) -> Option<&SmartDevice> {
-        self.devices.get(&port)
+    pub fn get(&self, port: u32) -> Result<&SmartDevice, PortNotConfiguredError> {
+        self.devices
+            .get(&port)
+            .context(PortNotConfiguredSnafu { port })
     }
 
-    pub fn get_mut(&mut self, port: u32) -> Option<&mut SmartDevice> {
-        self.devices.get_mut(&port)
+    pub fn get_mut(&mut self, port: u32) -> Result<&mut SmartDevice, PortNotConfiguredError> {
+        self.devices
+            .get_mut(&port)
+            .context(PortNotConfiguredSnafu { port })
     }
 }
 
@@ -38,17 +66,14 @@ pub enum SmartDevice {
 }
 
 impl SmartDevice {
-    pub fn as_motor(&self) -> Option<&Motor> {
-        match self {
-            SmartDevice::Motor(m) => Some(m),
+    pub fn new(spec: SmartDeviceSpec, port: u32, interface: SimulatorInterface) -> Self {
+        match spec {
+            SmartDeviceSpec::Motor => Self::Motor(Motor::new(port, interface)),
         }
     }
-}
-
-impl From<SmartDeviceSpec> for SmartDevice {
-    fn from(value: SmartDeviceSpec) -> Self {
-        match value {
-            SmartDeviceSpec::Motor => SmartDevice::Motor(Motor::default()),
+    pub fn as_motor(&self) -> Result<&Motor, IncorrectDeviceTypeError> {
+        match self {
+            SmartDevice::Motor(m) => Ok(m),
         }
     }
 }
@@ -61,27 +86,42 @@ impl From<&SmartDevice> for SmartDeviceSpec {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Motor {
-    pub encoder_units: MotorEncoderUnits,
-    pub brake_mode: MotorBrakeMode,
-    pub output_volts: i8,
+    port: u32,
+    brake_mode: MotorBrakeMode,
+    encoder_units: MotorEncoderUnits,
+    output_volts: i8,
+    interface: SimulatorInterface,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[repr(u32)]
-pub enum MotorEncoderUnits {
-    #[default]
-    Degrees = 0,
-    Rotations,
-    Counts,
-}
+impl Motor {
+    pub fn new(port: u32, interface: SimulatorInterface) -> Self {
+        Self {
+            port,
+            brake_mode: MotorBrakeMode::default(),
+            encoder_units: MotorEncoderUnits::default(),
+            output_volts: 0,
+            interface,
+        }
+    }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[repr(u32)]
-pub enum MotorBrakeMode {
-    #[default]
-    Coast = 0,
-    Brake,
-    Hold,
+    fn publish(&self) {
+        self.interface.send(SimulatorEvent::MotorUpdated {
+            port: self.port,
+            brake_mode: self.brake_mode,
+            encoder_units: self.encoder_units,
+            volts: self.output_volts,
+        });
+    }
+
+    pub fn set_output_volts(&mut self, volts: i8) {
+        if volts < -127 {
+            self.interface.send(SimulatorEvent::Warning(format!(
+                "Motor voltage out of range: {volts} < -127"
+            )))
+        }
+        self.output_volts = volts.clamp(-127, 127);
+        self.publish();
+    }
 }

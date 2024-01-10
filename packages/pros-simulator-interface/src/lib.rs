@@ -48,6 +48,24 @@ pub struct CompetitionPhase {
     pub is_competition: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[repr(u32)]
+pub enum MotorEncoderUnits {
+    #[default]
+    Degrees = 0,
+    Rotations,
+    Counts,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[repr(u32)]
+pub enum MotorBrakeMode {
+    #[default]
+    Coast = 0,
+    Brake,
+    Hold,
+}
+
 /// An event that happens inside the simulator that the API consumer might want to know about.
 /// Use this to monitor robot code progress, simulated LCD updates, log messages, and more.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -74,6 +92,13 @@ pub enum SimulatorEvent {
     LcdColorsUpdated { foreground: u32, background: u32 },
     /// The LCD has shut down and should be blanked.
     LcdShutdown,
+
+    MotorUpdated {
+        port: u32,
+        volts: i8,
+        encoder_units: MotorEncoderUnits,
+        brake_mode: MotorBrakeMode,
+    },
 }
 
 /// A message sent to the simulator to control the robot code environment.

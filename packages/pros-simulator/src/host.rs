@@ -103,13 +103,13 @@ impl Host {
         Ok(Self {
             memory,
             module,
-            interface,
             lcd: Arc::new(Mutex::new(lcd)),
             mutexes: Arc::new(Mutex::new(mutexes)),
             tasks: Arc::new(Mutex::new(tasks)),
             controllers: Arc::new(Mutex::new(controllers)),
             competition_phase: Default::default(),
-            smart_ports: Default::default(),
+            smart_ports: Arc::new(Mutex::new(SmartPorts::new(interface.clone()))),
+            interface,
             start_time: Instant::now(),
         })
     }
