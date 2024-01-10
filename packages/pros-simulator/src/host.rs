@@ -19,6 +19,7 @@ use wasmtime::{
 use self::{
     controllers::Controllers,
     multitasking::MutexPool,
+    smart_device::SmartPorts,
     task::{TaskHandle, TaskPool},
 };
 use crate::interface::SimulatorInterface;
@@ -83,6 +84,7 @@ pub struct Host {
     tasks: Arc<Mutex<TaskPool>>,
     controllers: Arc<Mutex<Controllers>>,
     competition_phase: Arc<Mutex<CompetitionPhase>>,
+    smart_ports: Arc<Mutex<SmartPorts>>,
     start_time: Instant,
 }
 
@@ -107,6 +109,7 @@ impl Host {
             tasks: Arc::new(Mutex::new(tasks)),
             controllers: Arc::new(Mutex::new(controllers)),
             competition_phase: Default::default(),
+            smart_ports: Default::default(),
             start_time: Instant::now(),
         })
     }
@@ -129,6 +132,8 @@ pub trait HostCtx {
     async fn controllers_lock(&self) -> MutexGuard<'_, Controllers>;
     fn competition_phase(&self) -> Arc<Mutex<CompetitionPhase>>;
     async fn competition_phase_lock(&self) -> MutexGuard<'_, CompetitionPhase>;
+    fn smart_ports(&self) -> Arc<Mutex<SmartPorts>>;
+    async fn smart_ports_lock(&self) -> MutexGuard<'_, SmartPorts>;
 }
 
 #[async_trait]
@@ -191,6 +196,14 @@ impl HostCtx for Host {
 
     async fn competition_phase_lock(&self) -> MutexGuard<'_, CompetitionPhase> {
         self.competition_phase.lock().await
+    }
+
+    fn smart_ports(&self) -> Arc<Mutex<SmartPorts>> {
+        self.smart_ports.clone()
+    }
+
+    async fn smart_ports_lock(&self) -> MutexGuard<'_, SmartPorts> {
+        self.smart_ports.lock().await
     }
 }
 
@@ -257,6 +270,14 @@ where
 
     async fn competition_phase_lock(&self) -> MutexGuard<'_, CompetitionPhase> {
         self.as_context().data().competition_phase_lock().await
+    }
+
+    fn smart_ports(&self) -> Arc<Mutex<SmartPorts>> {
+        self.as_context().data().smart_ports()
+    }
+
+    async fn smart_ports_lock(&self) -> MutexGuard<'_, SmartPorts> {
+        self.as_context().data().smart_ports_lock().await
     }
 }
 

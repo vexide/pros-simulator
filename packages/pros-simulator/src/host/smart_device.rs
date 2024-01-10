@@ -48,7 +48,7 @@ impl SmartDevice {
 impl From<SmartDeviceSpec> for SmartDevice {
     fn from(value: SmartDeviceSpec) -> Self {
         match value {
-            SmartDeviceSpec::Motor => SmartDevice::Motor(Motor {}),
+            SmartDeviceSpec::Motor => SmartDevice::Motor(Motor::default()),
         }
     }
 }
@@ -61,5 +61,27 @@ impl From<&SmartDevice> for SmartDeviceSpec {
     }
 }
 
-#[derive(Debug)]
-pub struct Motor {}
+#[derive(Debug, Default)]
+pub struct Motor {
+    pub encoder_units: MotorEncoderUnits,
+    pub brake_mode: MotorBrakeMode,
+    pub output_volts: i8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(u32)]
+pub enum MotorEncoderUnits {
+    #[default]
+    Degrees = 0,
+    Rotations,
+    Counts,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(u32)]
+pub enum MotorBrakeMode {
+    #[default]
+    Coast = 0,
+    Brake,
+    Hold,
+}

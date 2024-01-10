@@ -72,6 +72,10 @@ async fn do_background_operations(
                 let mut phase = caller.competition_phase_lock().await;
                 *phase = new_phase;
             }
+            SimulatorMessage::PortsUpdate(ports) => {
+                let mut smart_ports = caller.smart_ports_lock().await;
+                smart_ports.update_specs(&ports);
+            }
         }
     }
 
