@@ -75,12 +75,14 @@ pub enum SimulatorEvent {
     /// The robot code has written the following text to the simulated serial port. A trailing newline should not be assumed.
     ConsoleMessage(String),
 
-    /// The robot code is being loaded into the simulator and compiled.
-    RobotCodeLoading,
-    /// The robot code has begun executing and the initialize/opcontrol task is about to be spawned.
-    RobotCodeStarting,
-    /// All tasks have finished executing.
-    RobotCodeFinished,
+    /// The robot code is being loaded and validated.
+    Loading,
+    /// The interface should configure the simulator world and must send a [`SimulatorMessage::Initialize`] to begin robot code execution.
+    ResourcesRequired,
+    /// The task scheduler has begun running robot code.
+    RobotCodeRunning,
+    /// All tasks have exited and the robot code has finished.
+    AllTasksFinished,
     /// The robot code has panicked or otherwise faulted.
     RobotCodeError { message: String, backtrace: String },
 
@@ -118,4 +120,7 @@ pub enum SimulatorMessage {
 
     /// The robot's smart ports have been updated. Map of port numbers to device specs.
     PortsUpdate(HashMap<u32, SmartDeviceSpec>),
+
+    /// The simulator has been configured, its smart ports have been set, and it is allowed to start robot code execution.
+    BeginSimulation,
 }

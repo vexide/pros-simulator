@@ -3,7 +3,7 @@ use std::{
     time::Duration,
 };
 
-use pros_simulator_interface::{CompetitionPhase, SimulatorMessage};
+use pros_simulator_interface::{CompetitionPhase, SimulatorEvent, SimulatorMessage};
 use pros_sys::{COMPETITION_AUTONOMOUS, COMPETITION_CONNECTED, COMPETITION_DISABLED};
 use tokio::{
     sync::Mutex,
@@ -52,6 +52,7 @@ async fn spawn_user_code(
 async fn do_background_operations(
     caller: &mut Caller<'_, Host>,
     messages: &mut Receiver<SimulatorMessage>,
+    mut ready_to_init: Option<&mut bool>,
 ) -> anyhow::Result<()> {
     while let Ok(message) = messages.try_recv() {
         match message {
@@ -76,6 +77,11 @@ async fn do_background_operations(
                 let mut smart_ports = caller.smart_ports_lock().await;
                 smart_ports.update_specs(&ports);
             }
+            SimulatorMessage::BeginSimulation => {
+                if let Some(ready_to_init) = ready_to_init.as_deref_mut() {
+                    *ready_to_init = true;
+                }
+            }
         }
     }
 
@@ -91,6 +97,16 @@ async fn system_daemon_task(
 
     let host = caller.data().clone();
 
+    let mut ready_to_init = false;
+
+    // wait for initialize to finish
+    while !ready_to_init {
+        do_background_operations(&mut caller, &mut messages, Some(&mut ready_to_init)).await?;
+        sleep(Duration::from_millis(2)).await;
+    }
+
+    host.interface().send(SimulatorEvent::RobotCodeRunning);
+
     let mut competition_task = {
         let mut pool = caller.tasks_lock().await;
         let init_options = TaskOptions::new_global(&mut pool, &host, "initialize")?
@@ -103,12 +119,12 @@ async fn system_daemon_task(
 
     // wait for initialize to finish
     while competition_task.lock().await.state() != TaskState::Finished {
-        do_background_operations(&mut caller, &mut messages).await?;
+        do_background_operations(&mut caller, &mut messages, None).await?;
         sleep(Duration::from_millis(2)).await;
     }
 
     loop {
-        do_background_operations(&mut caller, &mut messages).await?;
+        do_background_operations(&mut caller, &mut messages, None).await?;
 
         let new_status = *caller.competition_phase_lock().await;
 

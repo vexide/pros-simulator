@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use anyhow::bail;
 use pros_simulator_interface::{
     MotorBrakeMode, MotorEncoderUnits, SimulatorEvent, SmartDeviceSpec,
 };
@@ -76,6 +77,11 @@ impl SmartDevice {
             SmartDevice::Motor(m) => Ok(m),
         }
     }
+    pub fn as_motor_mut(&mut self) -> Result<&mut Motor, IncorrectDeviceTypeError> {
+        match self {
+            SmartDevice::Motor(m) => Ok(m),
+        }
+    }
 }
 
 impl From<&SmartDevice> for SmartDeviceSpec {
@@ -123,5 +129,29 @@ impl Motor {
         }
         self.output_volts = volts.clamp(-127, 127);
         self.publish();
+    }
+
+    pub fn set_encoder_units(&mut self, units: u32) -> anyhow::Result<()> {
+        let units = match units {
+            0 => MotorEncoderUnits::Degrees,
+            1 => MotorEncoderUnits::Rotations,
+            2 => MotorEncoderUnits::Counts,
+            _ => bail!("Invalid encoder unit `{}`", units),
+        };
+        self.encoder_units = units;
+        self.publish();
+        Ok(())
+    }
+
+    pub fn set_brake_mode(&mut self, mode: u32) -> anyhow::Result<()> {
+        let mode = match mode {
+            0 => MotorBrakeMode::Coast,
+            1 => MotorBrakeMode::Brake,
+            2 => MotorBrakeMode::Hold,
+            _ => bail!("Invalid brake mode `{}`", mode),
+        };
+        self.brake_mode = mode;
+        self.publish();
+        Ok(())
     }
 }

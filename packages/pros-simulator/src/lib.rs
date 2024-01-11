@@ -40,7 +40,7 @@ pub async fn simulate(
     .unwrap();
 
     tracing::info!("JIT compiling your robot code... 🚀");
-    interface.send(SimulatorEvent::RobotCodeLoading);
+    interface.send(SimulatorEvent::Loading);
 
     let module = Module::from_file(&engine, robot_code)?;
 
@@ -54,8 +54,9 @@ pub async fn simulate(
 
     system_daemon_initialize(&host, messages).await?;
 
+    interface.send(SimulatorEvent::ResourcesRequired);
     TaskPool::run_to_completion(&host).await?;
-    interface.send(SimulatorEvent::RobotCodeFinished);
+    interface.send(SimulatorEvent::AllTasksFinished);
 
     Ok(())
 }

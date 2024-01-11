@@ -5,10 +5,6 @@ use core::time::Duration;
 
 use pros::prelude::*;
 
-extern "C" {
-    fn rtos_suspend_all();
-}
-
 pub struct SimRobot {
     controller: Controller,
 }
