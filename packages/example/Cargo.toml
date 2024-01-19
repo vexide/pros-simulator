@@ -7,4 +7,4 @@ edition = "2021"
 
 [dependencies]
 # pros = "0.4.0"
-pros = { path = "../../../pros-rs/pros" }
+pros = { path = "../../../pros-rs/packages/pros" }
