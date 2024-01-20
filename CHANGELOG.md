@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Implemented `write()` function for stdout and stderr
+
+### Changed
+
+- `puts` now adds an implicit newline (**Breaking change**)
+
 ## [0.5.0] - 2024-01-04
 
 ### Added

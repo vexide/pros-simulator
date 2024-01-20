@@ -3,7 +3,7 @@
 
 use core::time::Duration;
 
-use pros::prelude::*;
+use pros::{devices::Controller, prelude::*};
 
 pub struct SimRobot {
     controller: Controller,
@@ -11,8 +11,10 @@ pub struct SimRobot {
 
 impl SimRobot {
     fn new() -> Self {
-        // pros::logger::ProsLogger::init().unwrap();
-        panic!("uh oh");
+        println!("Hello world");
+        Self {
+            controller: Controller::Master,
+        }
     }
 }
 

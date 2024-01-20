@@ -16,15 +16,11 @@ use std::process::exit;
 use pros_simulator_interface::SimulatorEvent;
 use wasmtime::{Caller, Linker, WasmBacktrace};
 
-use crate::host::{memory::SharedMemoryExt, task::TaskPool, Host, HostCtx};
+use crate::host::{memory::SharedMemoryExt, task::TaskPool, ContextExt, Host, HostCtx};
 
 pub fn configure_generic_io_api(linker: &mut Linker<Host>) -> anyhow::Result<()> {
     linker.func_wrap0_async("env", "__errno", |mut caller: Caller<'_, Host>| {
-        Box::new(async move {
-            let current_task = caller.current_task().await;
-            let errno = current_task.lock().await.errno(&mut caller).await;
-            Ok(errno.address())
-        })
+        Box::new(async move { Ok(caller.errno_address().await) })
     })?;
 
     linker.func_wrap1_async("env", "sim_abort", |caller: Caller<'_, Host>, msg: u32| {
@@ -39,13 +35,40 @@ pub fn configure_generic_io_api(linker: &mut Linker<Host>) -> anyhow::Result<()>
 
     linker.func_wrap1_async("env", "puts", |caller: Caller<'_, Host>, buffer: u32| {
         Box::new(async move {
-            let console_message = caller.memory().read_c_str(buffer).unwrap();
+            let mut console_message = caller.memory().read_c_str(buffer).unwrap();
+            console_message.push('\n');
             caller
                 .interface()
                 .send(SimulatorEvent::ConsoleMessage(console_message));
             u32::from(true)
         })
     })?;
+
+    linker.func_wrap3_async(
+        "env",
+        "write",
+        |mut caller: Caller<'_, Host>, fd: i32, buffer: u32, count: u32| {
+            Box::new(async move {
+                if fd < 0 || count > i32::MAX as u32 {
+                    caller.set_errno(pros_sys::EINVAL).await;
+                    return Ok(-1);
+                }
+                if fd != 1 && fd != 2 {
+                    caller.set_errno(pros_sys::EBADF).await;
+                    return Ok(-1);
+                }
+
+                let buffer = caller
+                    .memory()
+                    .read_relaxed(buffer as usize, count as usize)?;
+                let buffer_string = String::from_utf8(buffer).unwrap();
+                caller
+                    .interface()
+                    .send(SimulatorEvent::ConsoleMessage(buffer_string));
+                Ok(count as i32)
+            })
+        },
+    )?;
 
     linker.func_wrap1_async("env", "exit", |caller: Caller<'_, Host>, code: i32| {
         Box::new(async move {

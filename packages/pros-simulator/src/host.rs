@@ -282,6 +282,30 @@ where
 }
 
 #[async_trait]
+pub trait ContextExt {
+    /// Sets the task's errno value to the given code.
+    async fn set_errno(&mut self, code: i32);
+    async fn errno_address(&mut self) -> u32;
+}
+
+#[async_trait]
+impl<T> ContextExt for T
+where
+    T: AsContextMut<Data = Host> + Sync + Send,
+{
+    async fn set_errno(&mut self, code: i32) {
+        let current_task = self.current_task().await;
+        let errno = current_task.lock().await.errno(&mut *self).await;
+        errno.set(&self.memory(), code);
+    }
+    async fn errno_address(&mut self) -> u32 {
+        let current_task = self.current_task().await;
+        let errno = current_task.lock().await.errno(self).await;
+        errno.address()
+    }
+}
+
+#[async_trait]
 pub trait ResultExt<T> {
     /// If this result is an error, sets the simulator's [`errno`](Host::errno_address) to the Err value.
     /// Returns `true` if the result was Ok and `false` if it was Err.
@@ -310,10 +334,7 @@ pub trait ResultExt<T> {
 impl<T: Send> ResultExt<T> for Result<T, i32> {
     async fn unwrap_or_errno(self, caller: &mut Caller<'_, Host>) -> bool {
         if let Err(code) = self {
-            let current_task = caller.data().tasks_lock().await.current();
-            let memory = caller.data().memory();
-            let errno = current_task.lock().await.errno(&mut *caller).await;
-            errno.set(&memory, code);
+            caller.set_errno(code).await;
         }
         self.is_ok()
     }
@@ -321,10 +342,7 @@ impl<T: Send> ResultExt<T> for Result<T, i32> {
     async fn unwrap_or_errno_as(self, caller: &mut Caller<'_, Host>, error_value: T) -> T {
         match self {
             Err(code) => {
-                let current_task = caller.data().tasks_lock().await.current();
-                let memory = caller.data().memory();
-                let errno = current_task.lock().await.errno(&mut *caller).await;
-                errno.set(&memory, code);
+                caller.set_errno(code).await;
                 error_value
             }
             Ok(value) => value,
