@@ -11,6 +11,7 @@ use crate::system::system_daemon::system_daemon_initialize;
 mod api;
 pub mod host;
 pub mod interface;
+mod mutex;
 pub mod stream;
 mod system;
 

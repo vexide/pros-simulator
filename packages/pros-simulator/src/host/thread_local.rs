@@ -95,7 +95,13 @@ where
             .by_id(task_handle)
             .expect("invalid task handle");
 
-        let mut task = task.lock().await;
-        task.local_storage(self).await
+        {
+            dbg!("current task: lock");
+            let mut task = task.lock().await;
+            dbg!("getting task storage");
+            let storage = task.local_storage(self).await;
+            dbg!("got task storage");
+            storage
+        }
     }
 }

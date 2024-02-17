@@ -129,7 +129,7 @@ pub fn configure_rtos_facilities_api(linker: &mut Linker<Host>) -> anyhow::Resul
         Box::new(async move {
             let current = caller.current_task().await;
 
-            let id = current.lock().await.id();
+            let id = { current.lock().await.id() };
             // fixing warning causes compile error
             id
         })
@@ -143,9 +143,11 @@ pub fn configure_rtos_facilities_api(linker: &mut Linker<Host>) -> anyhow::Resul
             if millis > 0 {
                 let end = Instant::now() + Duration::from_millis(millis.into());
                 while Instant::now() < end {
+                    eprint!("Yielding in delay fn");
                     TaskPool::yield_now().await;
                 }
             } else {
+                eprint!("Yielding in delay fn");
                 TaskPool::yield_now().await;
             }
 

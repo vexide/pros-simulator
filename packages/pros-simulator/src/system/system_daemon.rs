@@ -5,16 +5,16 @@ use std::{
 
 use pros_simulator_interface::{CompetitionPhase, SimulatorEvent, SimulatorMessage};
 use pros_sys::{COMPETITION_AUTONOMOUS, COMPETITION_CONNECTED, COMPETITION_DISABLED};
-use tokio::{
-    sync::Mutex,
-    time::{interval, sleep},
-};
+use tokio::time::{interval, sleep};
 use wasmtime::Caller;
 
-use crate::host::{
-    lcd::Lcd,
-    task::{Task, TaskOptions, TaskState},
-    Host, HostCtx,
+use crate::{
+    host::{
+        lcd::Lcd,
+        task::{Task, TaskOptions, TaskState},
+        Host, HostCtx,
+    },
+    mutex::Mutex,
 };
 
 enum UserTask {

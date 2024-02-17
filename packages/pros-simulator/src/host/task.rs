@@ -8,14 +8,17 @@ use std::{
 
 use anyhow::{bail, Context};
 use pros_simulator_interface::SimulatorEvent;
-use tokio::sync::{Mutex, MutexGuard};
 use wasmtime::{
     AsContextMut, Caller, Engine, Func, Instance, Linker, Module, SharedMemory, Store, Table,
     TypedFunc, WasmParams,
 };
 
 use super::{memory::SharedMemoryExt, thread_local::TaskStorage, Host, HostCtx, WasmAllocator};
-use crate::{api::configure_api, interface::SimulatorInterface};
+use crate::{
+    api::configure_api,
+    interface::SimulatorInterface,
+    mutex::{Mutex, MutexGuard},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskState {
@@ -227,7 +230,7 @@ impl Task {
         let task_impl = self.task_impl;
         async move {
             let mut store = store.lock().await;
-            task_impl.call_async(&mut *store, ()).await
+            task_impl.call_async(&mut **store, ()).await
         }
     }
 
@@ -263,6 +266,7 @@ pub struct TaskPool {
     yield_pending: bool,
     shutdown_pending: bool,
     interface: SimulatorInterface,
+    allow_yield: bool,
 }
 
 impl TaskPool {
@@ -282,6 +286,7 @@ impl TaskPool {
             yield_pending: false,
             shutdown_pending: false,
             interface,
+            allow_yield: false,
         })
     }
 
