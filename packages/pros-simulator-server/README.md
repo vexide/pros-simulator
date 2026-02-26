@@ -2,9 +2,11 @@
 
 > Stream newline-delimited JSON events from `pros-simulator` with a standalone binary
 
-[![CI Status](https://github.com/pros-rs/pros-simulator/actions/workflows/rust.yml/badge.svg)](https://github.com/pros-rs/pros-simulator/actions/workflows/rust.yml)
+![Maintenance](https://img.shields.io/maintenance/no/2024)
 ![MIT License](https://img.shields.io/crates/l/pros-simulator-server)
 ![Crates.io](https://img.shields.io/crates/v/pros-simulator-server)
+
+This crate is unmaintained and deprecated and only ever supported PROS programs written in Rust. You should consider using [vexide](https://vexide.dev) (a Rust framework with built-in simulation capabilities) or [vex-v5-qemu](https://github.com/vexide/vex-v5-qemu) (which supports simulating PROS programs written in C++).
 
 ## Installation
 
